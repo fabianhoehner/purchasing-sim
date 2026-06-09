@@ -21,19 +21,32 @@ export function Histogram({
   material,
   samples,
   line,
+  materials,
+  onSelect,
 }: {
   material: Material;
   samples: number[]; // ascending window-requirement samples
   line: MaterialLine | undefined;
+  materials: Material[];
+  onSelect: (id: string) => void;
 }) {
   const [ref, width] = useMeasure<HTMLDivElement>();
   const height = 200;
   const qty = line?.qty ?? 0;
   const fill = line?.coverage ?? 0;
 
+  const PartSelect = (
+    <select className="hist-select" value={material.id} onChange={(e) => onSelect(e.target.value)} aria-label="Select part">
+      {materials.map((m) => (
+        <option key={m.id} value={m.id}>{m.name}</option>
+      ))}
+    </select>
+  );
+
   if (samples.length === 0) {
     return (
       <div ref={ref}>
+        <div className="hist-head">{PartSelect}</div>
         <p className="hist-empty">No requirement for this material.</p>
       </div>
     );
@@ -67,7 +80,7 @@ export function Histogram({
   return (
     <div ref={ref}>
       <div className="hist-head">
-        <span className="hist-title">{material.name}</span>
+        {PartSelect}
         <span className="hist-readout">
           buy <strong>{qty.toLocaleString("en-US")}</strong> → <strong style={{ color: theme.red }}>{(fill * 100).toFixed(0)}%</strong> fill rate
         </span>

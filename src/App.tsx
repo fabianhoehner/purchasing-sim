@@ -7,21 +7,22 @@ import { Summary } from "./components/Summary";
 import { useSimulation } from "./hooks/useSimulation";
 
 const BREAKDOWN = "__breakdown";
-const TOTAL = "__total";
 
 export function App() {
   const { config, prepared, allocation, fullCost, actions } = useSimulation();
   const [goodSel, setGoodSel] = useState<string>("__agg");
   const [matView, setMatView] = useState<string>(BREAKDOWN);
+  // The distribution panel has its own part selection, independent of the chart.
+  const [histPart, setHistPart] = useState<string>("");
 
   const fundedMaterials = useMemo(() => allocation.lines.filter((l) => l.funded).length, [allocation]);
 
-  // The part shown in the distribution: the drilled-in material, else the top
-  // funded line (so there's always something instructive to look at).
+  // Default the distribution to the top funded line, until the user picks a part
+  // (via the histogram selector or by clicking a table row).
   const focusId = useMemo(() => {
-    if (matView !== BREAKDOWN && matView !== TOTAL) return matView;
+    if (histPart && prepared.world.materials.some((m) => m.id === histPart)) return histPart;
     return allocation.lines.find((l) => l.funded)?.materialId ?? allocation.lines[0]?.materialId ?? prepared.world.materials[0]?.id;
-  }, [matView, allocation.lines, prepared.world.materials]);
+  }, [histPart, allocation.lines, prepared.world.materials]);
 
   const focusMaterial = prepared.world.materials.find((m) => m.id === focusId);
   const focusLine = allocation.lines.find((l) => l.materialId === focusId);
@@ -61,9 +62,9 @@ export function App() {
           <section className="card">
             <div className="section-head">
               <h2>Prioritised purchase list</h2>
-              <p>Every candidate unit competes for the next euro, ranked by reward per euro. The red line is the budget cut. Click a row to inspect a part.</p>
+              <p>Every candidate unit competes for the next euro, ranked by reward per euro. The red line is the budget cut. Click a row to inspect its distribution below.</p>
             </div>
-            <PurchaseTable allocation={allocation} world={prepared.world} focusId={focusId ?? ""} onSelect={setMatView} />
+            <PurchaseTable allocation={allocation} world={prepared.world} focusId={focusId ?? ""} onSelect={setHistPart} />
           </section>
 
           <section className="card">
@@ -71,7 +72,15 @@ export function App() {
               <h2>Requirement distribution — why this quantity</h2>
               <p>The buy quantity sits on the part's requirement distribution at exactly its fill rate. Move the budget and the red line slides.</p>
             </div>
-            {focusMaterial && <Histogram material={focusMaterial} samples={focusSamples} line={focusLine} />}
+            {focusMaterial && (
+              <Histogram
+                material={focusMaterial}
+                samples={focusSamples}
+                line={focusLine}
+                materials={prepared.world.materials}
+                onSelect={setHistPart}
+              />
+            )}
           </section>
         </main>
       </div>
