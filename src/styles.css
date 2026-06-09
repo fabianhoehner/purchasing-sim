@@ -262,6 +262,30 @@ select {
   font-family: var(--sans);
   margin: 6px 2px 0;
 }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin: 4px 2px 0;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-swatch {
+  width: 11px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.legend-more {
+  color: var(--ink-faint);
+  font-style: italic;
+}
 
 /* ---- summary --------------------------------------------------------- */
 .summary {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildBomIndex, explodeTrajectory } from "./bom";
+import { meanRequirementLines } from "./requirement";
+import { latentLevel } from "./demand";
 import { serviceLevelAt, survivalAtLeast } from "./montecarlo";
 import { scoreMaterial } from "./scoring";
 import { applyOptionValue, penaltyFactor } from "./substitution";
@@ -40,6 +42,39 @@ describe("bom explosion", () => {
     const req = explodeTrajectory(index, demand, 3);
     expect(req["a"]).toEqual([8, 12, 4]); // g1 uses 2 each
     expect(req["abis"]).toEqual([1, 0, 3]); // g2 uses 1 each
+  });
+});
+
+describe("requirement breakdown", () => {
+  it("per-good lines equal qty x latent demand, and material lines sum across goods", () => {
+    const world = tinyWorld(); // g1 uses 2x 'a'; g2 uses 1x 'abis'
+    const bd = meanRequirementLines(world);
+    // g1's line for material 'a' is 2 x latentLevel(g1)
+    for (let t = 1; t <= world.horizonMonths; t++) {
+      expect(bd.byGood["g1"]["a"][t - 1]).toBeCloseTo(2 * latentLevel(world.goods[0], t), 9);
+    }
+    // 'a' total across goods equals g1's contribution (only g1 uses it)
+    expect(bd.all["a"]).toEqual(bd.byGood["g1"]["a"]);
+    // total BOM qty per good
+    expect(bd.goodTotalQty["g1"]).toBe(2);
+    expect(bd.goodTotalQty["g2"]).toBe(1);
+  });
+
+  it("on the default world, per-material lines sum to the aggregate per period", () => {
+    const prepared = prepare({ ...DEFAULT_CONFIG, nTrajectories: 200 });
+    const bd = prepared.mc.breakdown;
+    const H = prepared.world.horizonMonths;
+    for (let t = 0; t < H; t++) {
+      let sum = 0;
+      for (const id of Object.keys(bd.all)) sum += bd.all[id][t];
+      // aggregate mean across goods of total requirement, computed independently
+      let direct = 0;
+      for (const e of prepared.world.bom) {
+        const g = prepared.world.goods.find((x) => x.id === e.goodId)!;
+        direct += e.qtyPerUnit * latentLevel(g, t + 1);
+      }
+      expect(sum).toBeCloseTo(direct, 6);
+    }
   });
 });
 

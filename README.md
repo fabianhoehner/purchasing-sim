@@ -135,5 +135,12 @@ UI:
 | `engine/allocate.ts` | Pool units, rank by score/€, walk the budget cut line |
 | `engine/simulate.ts` | Orchestration; splits the expensive prepare from the cheap allocate |
 
-The UI (`src/components`, `src/hooks`) renders two time-aligned quantile fan
-charts, the prioritised purchase table with the cut line, and the controls.
+The UI (`src/components`, `src/hooks`) renders two time-aligned charts, the
+prioritised purchase table with the cut line, and the controls. The good
+selector drives both charts: the top shows that good's (or the aggregate)
+demand fan, and the bottom shows the raw materials it explodes into. The
+requirement chart has three views — a **breakdown** (one expected line per
+material, which sum to the total), the **total** with its uncertainty fan, and a
+**drill-down** to a single material's fan. Because expected requirement is just
+`BOM qty × latent demand`, the breakdown lines are exact and additive
+(`engine/requirement.ts`).

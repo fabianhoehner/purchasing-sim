@@ -98,6 +98,21 @@ export interface SeriesPoint {
   value: number;
 }
 
+/**
+ * Expected (mean) requirement decomposition. Because means add, a material's
+ * per-good lines sum to its total line, and all material lines sum to the
+ * aggregate — so these can be overlaid as a clean decomposition without the
+ * clutter of stacking many uncertainty fans.
+ */
+export interface BreakdownLines {
+  /** good id -> material id -> mean requirement per sale month (1..horizon). */
+  byGood: Record<string, Record<string, number[]>>;
+  /** material id -> mean requirement summed across all goods, per sale month. */
+  all: Record<string, number[]>;
+  /** good id -> total BOM quantity (units of raw material per finished unit). */
+  goodTotalQty: Record<string, number>;
+}
+
 export interface McResult {
   config: Config;
   months: number[]; // forecast month indices, 1..horizon
@@ -111,6 +126,8 @@ export interface McResult {
   /** Time-shifted raw-material requirement fans per material and aggregate. */
   requirementByMaterial: Record<string, Band[]>;
   requirementAggregate: Band[];
+  /** Expected per-material requirement lines (decomposition), see above. */
+  breakdown: BreakdownLines;
   /** Sorted (ascending) window-requirement samples per material, for scoring. */
   windowSamplesByMaterial: Record<string, number[]>;
   /** Mean window requirement per material (for weighting / display). */

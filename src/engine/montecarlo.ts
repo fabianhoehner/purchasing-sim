@@ -10,6 +10,7 @@
 
 import { buildBomIndex } from "./bom";
 import { sampleHistory, sampleTrajectory } from "./demand";
+import { meanRequirementLines } from "./requirement";
 import { Rng } from "./rng";
 import { applyOptionValue } from "./substitution";
 import type { Band, Config, McResult, SeriesPoint, World } from "./types";
@@ -134,6 +135,7 @@ export function runMonteCarlo(world: World, config: Config): McResult {
     forecastAggregate,
     requirementByMaterial,
     requirementAggregate,
+    breakdown: meanRequirementLines(world),
     windowSamplesByMaterial,
     windowMeanByMaterial,
   };
