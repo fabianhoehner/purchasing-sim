@@ -3,9 +3,9 @@
 A browser-based teaching simulator for buying raw materials when finished-good
 demand is uncertain. It generates probabilistic demand for a set of finished
 goods, explodes that demand through bills of material into raw-material
-requirements (offset in time, because parts are consumed before goods are sold),
-and ranks every candidate purchase into a single economic priority list,
-Lokad-style. Given a budget, it fills that list top-down and shows what to buy.
+requirements, and ranks every candidate purchase into a single economic priority
+list, Lokad-style. Given a budget, it fills that list top-down and shows what to
+buy — and a per-part requirement histogram shows why each quantity was chosen.
 
 > **The teaching point.** You do not plan to the mean, you plan to the economics
 > of the tail. Parts that are shared across many products, or that are hard to
@@ -44,10 +44,10 @@ Move the controls and the two signature behaviours appear and disappear:
   off and the premium loses that buffer (its quantity drops) while the base —
   now without a backup — becomes more critical and is bought a little deeper.
 
-Other controls: **budget** (slider + entry, moves the cut line live),
-**manufacturing lead time** (shifts the requirement curve earlier), **stockout
-penalty** (the ratio of stockout penalty to enabled margin), **per-material
-cost / lead-time edits**, and a **reset to defaults**.
+Other controls: **budget** (slider + entry, moves the cut line live), **stockout
+penalty** (the ratio of stockout penalty to enabled margin), **per-material cost
+/ lead-time edits**, and a **reset to defaults**. All selections live in the left
+panel so the graphs on the right shift as you change them.
 
 ## The model
 
@@ -59,20 +59,20 @@ drawn as a Gamma–Poisson mixture and parameterised by a dispersion
 `d = variance / mean ≥ 1`, so demand is overdispersed. An optional shared
 multiplicative **shock** (mean 1) moves all goods together when correlation is on.
 
-### Bills of material and the two lead times
+### Bills of material and lead time
 Each good has a BOM over up to ten materials; a few materials are shared across
 many goods (so their aggregate demand is large and lumpy), the rest are unique.
-Two materials are the base of a **one-way substitution pair** (a premium part can
-stand in for a base part, never the reverse).
+Goods are given distinct seasonal phases and trends, so the aggregate requirement
+genuinely differs in shape from any single good (not "an individual with a zero
+added"). Two materials are the base of a **one-way substitution pair** (a premium
+part can stand in for a base part, never the reverse).
 
-- **Manufacturing lead time** governs *timing*: raw consumption leads the sale by
-  this many periods, so the requirement curve is the demand curve shifted
-  earlier. It changes *when* a unit is needed, not how many — this is the visible
-  offset between the two charts.
-- **Procurement lead time** governs *quantity*: it sets the coverage window the
-  current purchase is responsible for. It is a small distribution, not a
-  constant, and the window length is sampled per trajectory — lead-time
-  uncertainty widens the requirement tail.
+Each material's **procurement lead time** sets the coverage window the current
+purchase is responsible for — it is a small distribution, not a constant, and the
+window length is sampled per trajectory, so lead-time uncertainty widens the
+requirement tail. (An earlier version also drew a manufacturing-lead-time *shift*
+between the two charts; since it changed timing but no quantity or economics, it
+was dropped as visual complexity without insight.)
 
 ### Requirement distribution (Monte Carlo)
 A few thousand demand trajectories are sampled, each exploded through the BOMs
@@ -113,8 +113,8 @@ only re-run when a structural input changes.
 ## Defaults
 
 6 finished goods · ~30 raw materials (a handful shared, two substitution pairs) ·
-monthly periods · 24 months history · 12 months horizon · manufacturing lead time
-1 · procurement lead times 1–6 · carrying cost 27%/yr · stockout penalty 0.5×
+monthly periods · 24 months history · 12 months horizon · procurement lead times
+1–6 · carrying cost 27%/yr · stockout penalty 0.5×
 margin · 3,000 Monte Carlo trajectories · a single fixed-seed world and observed
 past, so a reload always reproduces the same status quo. The probabilistic part
 is the *future* projection (the Monte Carlo fan), not the past — there is one
@@ -131,21 +131,27 @@ UI:
 | `engine/rng.ts` | Seeded PRNG + negative-binomial / gamma / Poisson samplers |
 | `engine/world.ts` | Seeded world: goods, materials, BOMs, substitution pairs |
 | `engine/demand.ts` | Latent process → observed history + forecast trajectories |
-| `engine/bom.ts` | Explode demand → time-shifted material requirements |
+| `engine/bom.ts` | Explode demand → per-material requirements |
+| `engine/requirement.ts` | Expected per-material requirement lines (the breakdown) |
 | `engine/montecarlo.ts` | Trajectories → per-material requirement distribution + chart fans |
 | `engine/substitution.ts` | One-way `substitutes_for` routing + premium option value |
 | `engine/scoring.ts` | Stock-reward score per unit (swappable seam) |
 | `engine/allocate.ts` | Pool units, rank by score/€, walk the budget cut line |
 | `engine/simulate.ts` | Orchestration; splits the expensive prepare from the cheap allocate |
 
-The UI (`src/components`, `src/hooks`) renders two time-aligned charts, the
-prioritised purchase table with the cut line, and the controls. The good
-selector drives both charts: the top shows that good's (or the aggregate)
-demand fan, and the bottom shows the raw materials it explodes into. The
-requirement chart has three views — a **breakdown** (one line per material, each
-with its own exploded history and expected future, which sum to the total), the
-**total** with its uncertainty fan, and a **drill-down** to a single material's
-fan. Both charts carry observed history: the requirement history is the observed
-finished-good demand exploded through the BOMs. Hover snaps to the nearest line.
-Because expected requirement is just `BOM qty × latent demand`, the breakdown
-lines are exact and additive (`engine/requirement.ts`).
+The UI (`src/components`, `src/hooks`) renders two time-aligned charts (sharing
+the exact same months — no offset), the prioritised purchase table with the cut
+line, a per-part requirement histogram, and the controls. The good selector
+drives both charts: the top shows that good's (or the aggregate) demand fan, and
+the bottom shows the raw materials it explodes into. The requirement chart has
+three views — a **breakdown** (one line per material, each with its own exploded
+history and one sampled future, so past and future look alike and the lines sum
+to the total), the **total** with its uncertainty fan, and a **drill-down** to a
+single material's fan. Hover snaps to the nearest line.
+
+The **requirement histogram** is the picture that explains a line in the purchase
+list: the empirical distribution of a part's requirement over its coverage
+window, with the chosen buy quantity drawn as a vertical line. The share of the
+distribution to its left is exactly the fill rate that quantity buys — so "buy
+2,038" reads off as "98% fill rate". Click any table row (or the left selector)
+to inspect a part; move the budget and the line slides live.

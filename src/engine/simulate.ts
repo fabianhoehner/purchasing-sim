@@ -13,7 +13,6 @@ export const DEFAULT_CONFIG: Config = {
   seed: 1742,
   historyMonths: 24,
   horizonMonths: 12,
-  manufacturingLeadTime: 1,
   correlatedShock: false,
   shockSd: 0.25,
   nTrajectories: 3000,

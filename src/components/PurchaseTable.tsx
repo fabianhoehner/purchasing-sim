@@ -22,11 +22,23 @@ function Badges({ m }: { m: Material }) {
   );
 }
 
-export function PurchaseTable({ allocation, world }: { allocation: Allocation; world: World }) {
+export function PurchaseTable({
+  allocation,
+  world,
+  focusId,
+  onSelect,
+}: {
+  allocation: Allocation;
+  world: World;
+  focusId: string;
+  onSelect: (id: string) => void;
+}) {
   const matById = useMemo(() => new Map(world.materials.map((m) => [m.id, m])), [world.materials]);
   const funded = allocation.lines.filter((l) => l.funded);
   const unfundedAll = allocation.lines.filter((l) => !l.funded);
   const unfunded = unfundedAll.slice(0, 12);
+  const rowClass = (l: { materialId: string; funded: boolean }) =>
+    `${l.funded ? "funded" : "unfunded"}${l.materialId === focusId ? " focused" : ""}`;
 
   return (
     <div className="table-wrap">
@@ -46,7 +58,7 @@ export function PurchaseTable({ allocation, world }: { allocation: Allocation; w
           {funded.map((l) => {
             const m = matById.get(l.materialId)!;
             return (
-              <tr key={l.materialId} className="funded">
+              <tr key={l.materialId} className={rowClass(l)} onClick={() => onSelect(l.materialId)}>
                 <td className="col-mat">
                   <span className="mat-name">{l.name}</span>
                   <Badges m={m} />
@@ -70,7 +82,7 @@ export function PurchaseTable({ allocation, world }: { allocation: Allocation; w
           {unfunded.map((l) => {
             const m = matById.get(l.materialId)!;
             return (
-              <tr key={l.materialId} className="unfunded">
+              <tr key={l.materialId} className={rowClass(l)} onClick={() => onSelect(l.materialId)}>
                 <td className="col-mat">
                   <span className="mat-name">{l.name}</span>
                   <Badges m={m} />

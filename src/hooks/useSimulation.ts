@@ -36,7 +36,6 @@ export function useSimulation() {
   const actions = useMemo(
     () => ({
       setBudget: (b: number) => setConfig((c) => ({ ...c, budget: clamp(Math.round(b), 0, Math.ceil(fullCost * 1.05)) })),
-      setManufacturingLeadTime: (m: number) => setConfig((c) => ({ ...c, manufacturingLeadTime: clamp(Math.round(m), 0, 6) })),
       setCorrelatedShock: (on: boolean) => setConfig((c) => ({ ...c, correlatedShock: on })),
       setStockoutPenaltyRatio: (r: number) => setConfig((c) => ({ ...c, stockoutPenaltyRatio: clamp(r, 0.05, 2) })),
       setMaterialOverride: (id: string, o: MaterialOverride) =>

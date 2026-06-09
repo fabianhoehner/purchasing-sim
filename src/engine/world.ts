@@ -42,10 +42,11 @@ interface SharedSpec {
 }
 
 const SHARED_SPECS: SharedSpec[] = [
-  // Cheap-but-critical: a fastener set used in essentially every product.
-  { id: "m_fastener", name: "Fastener Set", cost: [0.5, 1.8], lead: [1, 2], leadSd: 0.4, qty: [4, 9], useProb: 1.0 },
+  // Cheap-but-critical: a fastener set, common but no longer in every BOM and at
+  // a modest count, so it does not automatically dwarf everything else.
+  { id: "m_fastener", name: "Fastener Set", cost: [0.5, 1.8], lead: [1, 2], leadSd: 0.4, qty: [2, 5], useProb: 0.7 },
   // Substitution pair 1: standard vs heavy-duty bearing.
-  { id: "m_bearing", name: "Bearing — Standard", cost: [4, 8], lead: [2, 4], leadSd: 0.7, qty: [1, 3], useProb: 0.85 },
+  { id: "m_bearing", name: "Bearing — Standard", cost: [4, 8], lead: [2, 4], leadSd: 0.7, qty: [1, 4], useProb: 0.85 },
   {
     id: "m_bearing_hd",
     name: "Bearing — Heavy-Duty",
@@ -116,13 +117,17 @@ export function buildWorld(opts: {
 }): World {
   const rng = new Rng(opts.seed);
 
-  const goods: FinishedGood[] = GOOD_SPECS.map((spec) => ({
+  const goods: FinishedGood[] = GOOD_SPECS.map((spec, i) => ({
     id: spec.id,
     name: spec.name,
     baseLevel: Math.round(pick(rng, spec.level)),
-    trend: rng.uniform(0.992, 1.015),
-    seasonalAmp: rng.uniform(0.05, 0.28),
-    seasonalPhase: rng.int(0, 11),
+    // Some goods grow, some decline — so the aggregate isn't a scaled individual.
+    trend: rng.uniform(0.982, 1.022),
+    // Pronounced, and the phases are spread around the year (with a little
+    // jitter) so goods peak in different months and the aggregate has a genuinely
+    // different shape than any single good.
+    seasonalAmp: rng.uniform(0.12, 0.45),
+    seasonalPhase: (i * 2 + rng.int(0, 1)) % 12,
     dispersion: round1(pick(rng, spec.disp)),
     margin: Math.round(pick(rng, spec.margin)),
   }));
@@ -186,7 +191,9 @@ export function buildWorld(opts: {
         premium: false,
         hasBackup: false,
       });
-      bom.push({ goodId: good.id, materialId: id, qtyPerUnit: rng.int(1, 4) });
+      // A wider quantity spread, so a unique high-count part can sometimes be
+      // the biggest line — the dominant material varies across goods.
+      bom.push({ goodId: good.id, materialId: id, qtyPerUnit: rng.int(1, 6) });
     }
   }
 

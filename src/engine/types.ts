@@ -59,8 +59,6 @@ export interface Config {
   seed: number;
   historyMonths: number; // observed history length
   horizonMonths: number; // forecast horizon
-  /** Production leads sale by this many periods (raw consumption is earlier). */
-  manufacturingLeadTime: number;
   /** Shared demand shock that moves goods up/down together. */
   correlatedShock: boolean;
   shockSd: number; // log-space sd of the shared shock
@@ -120,6 +118,9 @@ export interface McResult {
   /** Observed history per good and aggregate (single sampled realisation). */
   historyByGood: Record<string, SeriesPoint[]>;
   historyAggregate: SeriesPoint[];
+  /** One sampled future trajectory per good — the jagged "scenario" line drawn
+   *  in the breakdown view so the future looks like the past, not a smooth mean. */
+  futureScenarioByGood: Record<string, number[]>;
   /** Forecast quantile fans per good and aggregate, per future month. */
   forecastByGood: Record<string, Band[]>;
   forecastAggregate: Band[];

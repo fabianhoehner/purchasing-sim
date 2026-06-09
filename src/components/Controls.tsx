@@ -1,6 +1,7 @@
-// Control sidebar. The budget slider is live (it only re-walks the ranked list).
-// Everything else re-runs the Monte Carlo, so those sliders commit on release to
-// keep dragging smooth.
+// Control sidebar — all selections and inputs live here, on the left, so the
+// graphs on the right shift live as you change them. The budget slider is live
+// (it only re-walks the ranked list); everything else re-runs the Monte Carlo,
+// so those sliders commit on release.
 
 import { useEffect, useState } from "react";
 import type { Config, Material, Prepared } from "../engine/types";
@@ -9,6 +10,9 @@ import type { SimActions } from "../hooks/useSimulation";
 function euro(v: number): string {
   return `€${Math.round(v).toLocaleString("en-US")}`;
 }
+
+const BREAKDOWN = "__breakdown";
+const TOTAL = "__total";
 
 /** Range input that can commit live or only when the drag ends. */
 function Slider(props: {
@@ -54,9 +58,7 @@ function MaterialEditor({ world, config, actions }: { world: { materials: Materi
       <label className="ctrl-label">Per-material edits</label>
       <select value={sel} onChange={(e) => setSel(e.target.value)} aria-label="Edit material">
         {world.materials.map((mm) => (
-          <option key={mm.id} value={mm.id}>
-            {mm.name}
-          </option>
+          <option key={mm.id} value={mm.id}>{mm.name}</option>
         ))}
       </select>
       <div className="sub-ctrl">
@@ -71,7 +73,7 @@ function MaterialEditor({ world, config, actions }: { world: { materials: Materi
         />
       </div>
       <div className="sub-ctrl">
-        <span className="sub-label">Lead time · {m.leadTimeMean.toFixed(1)} mo</span>
+        <span className="sub-label">Procurement lead time · {m.leadTimeMean.toFixed(1)} mo</span>
         <Slider
           value={m.leadTimeMean}
           min={1}
@@ -95,14 +97,43 @@ export function Controls({
   prepared,
   fullCost,
   actions,
+  goodSel,
+  setGoodSel,
+  matView,
+  setMatView,
 }: {
   config: Config;
   prepared: Prepared;
   fullCost: number;
   actions: SimActions;
+  goodSel: string;
+  setGoodSel: (v: string) => void;
+  matView: string;
+  setMatView: (v: string) => void;
 }) {
   return (
     <aside className="controls">
+      <div className="ctrl-group">
+        <label className="ctrl-label">Chart view</label>
+        <select value={goodSel} onChange={(e) => setGoodSel(e.target.value)} aria-label="Select good">
+          <option value="__agg">Demand: all goods (aggregate)</option>
+          {prepared.world.goods.map((g) => (
+            <option key={g.id} value={g.id}>Demand: {g.name}</option>
+          ))}
+        </select>
+        <div style={{ height: 8 }} />
+        <select value={matView} onChange={(e) => setMatView(e.target.value)} aria-label="Requirement view">
+          <option value={BREAKDOWN}>Requirement: breakdown (per material)</option>
+          <option value={TOTAL}>Requirement: total + uncertainty</option>
+          <optgroup label="Drill down to one material">
+            {prepared.world.materials.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </optgroup>
+        </select>
+        <p className="ctrl-hint">Drives both charts and the distribution below. Click a table row to inspect a part.</p>
+      </div>
+
       <div className="ctrl-group primary">
         <label className="ctrl-label">Budget</label>
         <Slider
@@ -123,12 +154,6 @@ export function Controls({
           onChange={(e) => actions.setBudget(Number(e.target.value))}
         />
         <p className="ctrl-hint">Funds the ranked list top-down. Full list costs {euro(fullCost)}.</p>
-      </div>
-
-      <div className="ctrl-group">
-        <label className="ctrl-label">Manufacturing lead time</label>
-        <Slider value={config.manufacturingLeadTime} min={0} max={6} step={1} onCommit={actions.setManufacturingLeadTime} format={(v) => `${v} mo`} />
-        <p className="ctrl-hint">Shifts the requirement curve earlier than the sale.</p>
       </div>
 
       <div className="ctrl-group">
@@ -170,9 +195,7 @@ export function Controls({
       <MaterialEditor world={prepared.world} config={config} actions={actions} />
 
       <div className="ctrl-group buttons">
-        <button className="btn ghost" onClick={actions.reset}>
-          Reset to defaults
-        </button>
+        <button className="btn ghost" onClick={actions.reset}>Reset to defaults</button>
       </div>
     </aside>
   );

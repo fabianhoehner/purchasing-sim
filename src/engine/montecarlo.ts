@@ -55,6 +55,14 @@ export function runMonteCarlo(world: World, config: Config): McResult {
     for (let i = 0; i < series.length; i++) historyAggregate[i].value += series[i];
   }
 
+  // --- one sampled future "scenario" (own stream) ---------------------------
+  // The breakdown view draws this single realisation so the future is jagged
+  // like the past, and per-material lines sum exactly to the aggregate.
+  const scenRng = new Rng((config.seed ^ 0x2f9a7c1b) >>> 0);
+  const scenario = sampleTrajectory(world.goods, H, scenRng, config.correlatedShock, config.shockSd);
+  const futureScenarioByGood: Record<string, number[]> = {};
+  world.goods.forEach((g, gi) => (futureScenarioByGood[g.id] = scenario[gi]));
+
   // --- forecast trajectories + explosion ------------------------------------
   const goodPeriod: Record<string, number[][]> = {};
   for (const g of world.goods) goodPeriod[g.id] = emptyMatrix(H, n);
@@ -131,6 +139,7 @@ export function runMonteCarlo(world: World, config: Config): McResult {
     historyMonths,
     historyByGood,
     historyAggregate,
+    futureScenarioByGood,
     forecastByGood,
     forecastAggregate,
     requirementByMaterial,
