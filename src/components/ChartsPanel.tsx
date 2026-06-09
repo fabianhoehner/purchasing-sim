@@ -1,35 +1,32 @@
 // The two stacked, time-aligned charts.
-//   Top:    finished-good demand (history + forecast fan), for one good or all.
-//   Bottom: the raw-material requirement that demand explodes into, plotted
-//           shifted earlier by the manufacturing lead time. It offers three
-//           views: a per-material *breakdown* (one expected line per material,
-//           the default), the *total* requirement with its uncertainty fan, or a
-//           single material drilled down to its fan.
-// The good selector drives both charts; both share width, margins and x-domain
-// so a column in one lines up with the same month in the other.
+//   Top:    finished-good demand (observed history + forecast fan), one good or all.
+//   Bottom: the raw-material requirement that demand explodes into — its own
+//           observed history plus the forecast — plotted shifted earlier by the
+//           manufacturing lead time. Three views: a per-material *breakdown* (one
+//           line per material, each with its own history, the default), the
+//           *total* with its uncertainty fan, or a single material drilled down.
+// The good selector drives both charts; both share width, margins and x-domain.
 
 import { useMemo, useState } from "react";
 import { useMeasure } from "../hooks/useMeasure";
 import { theme } from "../theme";
-import type { Band, McResult, World } from "../engine/types";
+import type { Band, BomEntry, McResult, SeriesPoint, World } from "../engine/types";
 import { FanChart, type LineSeries } from "./FanChart";
 
-// A muted categorical palette for the breakdown lines.
 const PALETTE = [
   "#2b6e7a", "#7a5a2b", "#496a8f", "#8f4949", "#5a7a3a", "#6a4a7a",
   "#a0762b", "#3a8f7a", "#8f7a3a", "#7a3a5a", "#4a5a8f", "#2b8f5a",
 ];
 const lineColor = (i: number) => PALETTE[i % PALETTE.length];
 
-function bandsYMax(bands: Band[], extra: { value: number }[] = []): number {
-  let m = 1;
-  for (const b of bands) m = Math.max(m, b.q95);
-  for (const h of extra) m = Math.max(m, h.value);
-  return m;
-}
-
 const BREAKDOWN = "__breakdown";
 const TOTAL = "__total";
+
+function maxOf(arr: number[], seed = 1): number {
+  let m = seed;
+  for (const v of arr) if (v > m) m = v;
+  return m;
+}
 
 export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
   const [ref, width] = useMeasure<HTMLDivElement>();
@@ -38,6 +35,14 @@ export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
 
   const mfg = mc.config.manufacturingLeadTime;
   const matName = useMemo(() => new Map(world.materials.map((m) => [m.id, m.name])), [world.materials]);
+  const bomByMat = useMemo(() => {
+    const map = new Map<string, BomEntry[]>();
+    for (const e of world.bom) {
+      if (!map.has(e.materialId)) map.set(e.materialId, []);
+      map.get(e.materialId)!.push(e);
+    }
+    return map;
+  }, [world.bom]);
   const xDomain = useMemo<[number, number]>(
     () => [-(world.historyMonths - 1), world.horizonMonths],
     [world.historyMonths, world.horizonMonths],
@@ -46,28 +51,55 @@ export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
   // --- demand (top) ---------------------------------------------------------
   const demandBands = goodSel === "__agg" ? mc.forecastAggregate : mc.forecastByGood[goodSel];
   const demandHistory = goodSel === "__agg" ? mc.historyAggregate : mc.historyByGood[goodSel];
-  const demandYMax = bandsYMax(demandBands, demandHistory);
+  const demandYMax = Math.max(maxOf(demandBands.map((b) => b.q95)), maxOf(demandHistory.map((h) => h.value)));
 
-  // --- requirement (bottom) -------------------------------------------------
+  // --- requirement (bottom): explode observed history through the BOMs -------
   const reqX = mc.months.map((m) => m - mfg);
 
+  // historical consumption of one material (optionally one good), plotted shifted
+  const matHistory = useMemo(
+    () =>
+      (matId: string): { t: number; v: number }[] =>
+        mc.historyMonths.map((hm, i) => {
+          let v = 0;
+          for (const e of bomByMat.get(matId) ?? []) {
+            if (goodSel !== "__agg" && e.goodId !== goodSel) continue;
+            v += e.qtyPerUnit * (mc.historyByGood[e.goodId]?.[i]?.value ?? 0);
+          }
+          return { t: hm - mfg, v };
+        }),
+    [bomByMat, goodSel, mc.historyByGood, mc.historyMonths, mfg],
+  );
+
+  const totalReqHistory: SeriesPoint[] = useMemo(
+    () =>
+      mc.historyMonths.map((hm, i) => {
+        let v = 0;
+        for (const e of world.bom) {
+          if (goodSel !== "__agg" && e.goodId !== goodSel) continue;
+          v += e.qtyPerUnit * (mc.historyByGood[e.goodId]?.[i]?.value ?? 0);
+        }
+        return { t: hm - mfg, value: v };
+      }),
+    [world.bom, goodSel, mc.historyByGood, mc.historyMonths, mfg],
+  );
+
+  // breakdown: one line per material, history + forecast-mean, sharing a colour
   const breakdown = useMemo(() => {
     const source = goodSel === "__agg" ? mc.breakdown.all : mc.breakdown.byGood[goodSel] ?? {};
     const ids = Object.keys(source).filter((id) => source[id].some((v) => v > 0.01));
     ids.sort((a, b) => Math.max(...source[b]) - Math.max(...source[a]));
-    const lines: LineSeries[] = ids.map((id, i) => ({
-      id,
-      name: matName.get(id) ?? id,
-      values: source[id],
-      color: lineColor(i),
-    }));
+    const lines: LineSeries[] = ids.map((id, i) => {
+      const future = mc.months.map((m, k) => ({ t: m - mfg, v: source[id][k] }));
+      return { id, name: matName.get(id) ?? id, points: [...matHistory(id), ...future], color: lineColor(i) };
+    });
     let yMax = 1;
-    for (const l of lines) for (const v of l.values) if (v > yMax) yMax = v;
+    for (const l of lines) for (const p of l.points) if (p.v > yMax) yMax = p.v;
     return { lines, yMax };
-  }, [goodSel, mc.breakdown, matName]);
+  }, [goodSel, mc.breakdown, mc.months, matName, matHistory, mfg]);
 
-  // Total requirement fan, good-aware: a good's total requirement is its demand
-  // scaled by its total BOM quantity, so we scale that good's demand fan.
+  // Total requirement fan, good-aware (a good's total requirement is its demand
+  // scaled by its total BOM quantity).
   const scaledGoodFan = (gid: string): Band[] => {
     const q = mc.breakdown.goodTotalQty[gid] ?? 0;
     return mc.forecastByGood[gid].map((b) => ({
@@ -77,23 +109,19 @@ export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
 
   let reqBands: Band[] | undefined;
   let reqLines: LineSeries[] | undefined;
+  let reqHistory: SeriesPoint[] | undefined;
   let reqYMax = 1;
   if (reqView === BREAKDOWN) {
     reqLines = breakdown.lines;
     reqYMax = breakdown.yMax;
   } else if (reqView === TOTAL) {
     reqBands = goodSel === "__agg" ? mc.requirementAggregate : scaledGoodFan(goodSel);
-    reqYMax = bandsYMax(reqBands);
+    reqHistory = totalReqHistory;
+    reqYMax = Math.max(maxOf(reqBands.map((b) => b.q95)), maxOf(reqHistory.map((h) => h.value)));
   } else {
     reqBands = mc.requirementByMaterial[reqView];
-    reqYMax = reqBands ? bandsYMax(reqBands) : 1;
-    // overlay the selected good's contribution to this material, if filtered
-    if (goodSel !== "__agg" && mc.breakdown.byGood[goodSel]?.[reqView]) {
-      reqLines = [{
-        id: "contrib", name: `${world.goods.find((g) => g.id === goodSel)?.name} share`,
-        values: mc.breakdown.byGood[goodSel][reqView], color: theme.requirement, dash: "4 3", bold: true,
-      }];
-    }
+    reqHistory = matHistory(reqView).map((p) => ({ t: p.t, value: p.v }));
+    reqYMax = Math.max(reqBands ? maxOf(reqBands.map((b) => b.q95)) : 1, maxOf(reqHistory.map((h) => h.value)));
   }
 
   const height = 188;
@@ -148,6 +176,7 @@ export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
           forecastX={reqX}
           bands={reqBands}
           lines={reqLines}
+          history={reqHistory}
           color={theme.requirement}
           bandColor={theme.requirementBand}
           bandInnerColor={theme.requirementBandInner}
@@ -169,14 +198,14 @@ export function ChartsPanel({ world, mc }: { world: World; mc: McResult }) {
       </div>
 
       <p className="chart-foot">
-        Showing <strong>{goodLabel}</strong>. The dashed vertical line is <em>now</em>; the dark line is observed
-        history. The requirement chart sits {mfg > 0 ? `${mfg} month(s) ` : ""}left of demand because parts are consumed
-        before goods are sold.{" "}
+        Showing <strong>{goodLabel}</strong>. The dashed vertical line is <em>now</em>; left of it is observed history,
+        right is the forecast. The requirement chart sits {mfg > 0 ? `${mfg} month(s) ` : ""}left of demand because parts
+        are consumed before goods are sold.{" "}
         {reqView === BREAKDOWN
-          ? "Each coloured line is one raw material's expected consumption; they sum to the total."
+          ? "Each coloured line is one raw material's consumption — past (jagged) and expected future; they sum to the total. Hover snaps to the nearest line."
           : reqView === TOTAL
             ? "The fan shows the median with 50% and 90% bands — the tail the priority list buys against."
-            : "Drilled into one material: the fan is its requirement uncertainty across all goods."}
+            : "Drilled into one material: the fan is its forecast uncertainty across all goods."}
       </p>
     </div>
   );

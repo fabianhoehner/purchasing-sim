@@ -170,13 +170,9 @@ export function Controls({
       <MaterialEditor world={prepared.world} config={config} actions={actions} />
 
       <div className="ctrl-group buttons">
-        <button className="btn" onClick={actions.reseed}>
-          Reseed world
-        </button>
         <button className="btn ghost" onClick={actions.reset}>
           Reset to defaults
         </button>
-        <span className="seed-tag">seed {config.seed}</span>
       </div>
     </aside>
   );

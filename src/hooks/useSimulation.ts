@@ -60,10 +60,6 @@ export function useSimulation() {
               : [...c.disabledSubstitutions, key],
           };
         }),
-      reseed: () => {
-        budgetInitialised.current = false;
-        setConfig((c) => ({ ...c, seed: Math.floor(Math.random() * 1_000_000) + 1 }));
-      },
       reset: () => {
         // Reset to the same default seed leaves fullCost unchanged, so the init
         // effect won't re-fire — set the budget directly here.

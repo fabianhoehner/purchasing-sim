@@ -1,6 +1,8 @@
 // A time-series chart that can draw, on a shared time axis:
-//   * one quantile fan (median + 50%/90% bands) — used for an uncertainty view, and
-//   * any number of plain lines — used for the per-material requirement breakdown.
+//   * one quantile fan (median + 50%/90% bands) — an uncertainty view,
+//   * an observed-history line, and
+//   * any number of plain lines, each spanning history and forecast — used for
+//     the per-material requirement breakdown.
 // The two app charts share width, margins and x-domain so their axes line up and
 // the manufacturing-lead-time offset between demand and requirement is visible.
 
@@ -15,10 +17,11 @@ export const CHART_MARGIN = { top: 26, right: 18, bottom: 26, left: 60 };
 export interface LineSeries {
   id: string;
   name: string;
-  values: number[]; // aligned to forecastX
+  /** Points across the whole axis (t is the plot month, history and forecast). */
+  points: { t: number; v: number }[];
   color: string;
   width?: number;
-  bold?: boolean; // the total / focused line — used for the hover readout
+  bold?: boolean;
   dash?: string;
 }
 
@@ -27,16 +30,16 @@ export interface FanChartProps {
   height: number;
   xDomain: [number, number];
   yMax: number;
-  /** Observed history line (months <= 0). Optional. */
+  /** Observed history line (dark). t is the plot month. */
   history?: SeriesPoint[];
-  /** X positions (month indices) for the forecast bands / lines. */
+  /** X positions (month indices) for the forecast bands. */
   forecastX: number[];
   /** Optional quantile fan. */
   bands?: Band[];
   color: string;
   bandColor: string;
   bandInnerColor: string;
-  /** Optional overlaid lines (decomposition). */
+  /** Optional overlaid lines (decomposition); hover snaps to the nearest one. */
   lines?: LineSeries[];
   yLabel: string;
   unit: string;
@@ -51,7 +54,7 @@ function fmt(v: number): string {
 
 export function FanChart(props: FanChartProps) {
   const { width, height, xDomain, yMax, history, forecastX, bands, color, lines } = props;
-  const [hoverX, setHoverX] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ mx: number; my: number } | null>(null);
 
   if (width <= 0) return <svg width="100%" height={height} />;
 
@@ -59,23 +62,11 @@ export function FanChart(props: FanChartProps) {
   const y = scaleLinear().domain([0, yMax * 1.08]).nice().range([height - CHART_MARGIN.bottom, CHART_MARGIN.top]);
 
   const bandPts = bands ? forecastX.map((t, i) => ({ t, b: bands[i] })) : [];
-  const outer = area<{ t: number; b: Band }>()
-    .x((d) => x(d.t))
-    .y0((d) => y(d.b.q05))
-    .y1((d) => y(d.b.q95));
-  const inner = area<{ t: number; b: Band }>()
-    .x((d) => x(d.t))
-    .y0((d) => y(d.b.q25))
-    .y1((d) => y(d.b.q75));
-  const median = line<{ t: number; b: Band }>()
-    .x((d) => x(d.t))
-    .y((d) => y(d.b.q50));
-  const histLine = line<SeriesPoint>()
-    .x((d) => x(d.t))
-    .y((d) => y(d.value));
-  const seriesLine = line<{ t: number; v: number }>()
-    .x((d) => x(d.t))
-    .y((d) => y(d.v));
+  const outer = area<{ t: number; b: Band }>().x((d) => x(d.t)).y0((d) => y(d.b.q05)).y1((d) => y(d.b.q95));
+  const inner = area<{ t: number; b: Band }>().x((d) => x(d.t)).y0((d) => y(d.b.q25)).y1((d) => y(d.b.q75));
+  const median = line<{ t: number; b: Band }>().x((d) => x(d.t)).y((d) => y(d.b.q50));
+  const histLine = line<SeriesPoint>().x((d) => x(d.t)).y((d) => y(d.value));
+  const seriesLine = line<{ t: number; v: number }>().x((d) => x(d.t)).y((d) => y(d.v));
 
   // x ticks: integers across the domain, spaced to ~7 labels.
   const span = xDomain[1] - xDomain[0];
@@ -85,17 +76,33 @@ export function FanChart(props: FanChartProps) {
   if (!xTicks.includes(0) && 0 >= xDomain[0] && 0 <= xDomain[1]) xTicks.push(0);
   const yTicks = y.ticks(5);
 
-  // hover: nearest forecast month index
-  let hi = -1;
-  if (hoverX !== null && forecastX.length) {
-    hi = 0;
-    for (let i = 1; i < forecastX.length; i++) {
-      if (Math.abs(forecastX[i] - hoverX) < Math.abs(forecastX[hi] - hoverX)) hi = i;
+  // --- hover -----------------------------------------------------------------
+  const monthX = hover ? x.invert(hover.mx) : null;
+
+  // nearest line by vertical pixel distance at the hovered month
+  let hotLine: LineSeries | null = null;
+  let hotPt: { t: number; v: number } | null = null;
+  if (hover && monthX !== null && lines && lines.length) {
+    let best = Infinity;
+    for (const l of lines) {
+      let p = l.points[0];
+      for (const q of l.points) if (Math.abs(q.t - monthX) < Math.abs(p.t - monthX)) p = q;
+      if (!p) continue;
+      const dy = Math.abs(hover.my - y(p.v));
+      if (dy < best) {
+        best = dy;
+        hotLine = l;
+        hotPt = p;
+      }
     }
   }
-  const hoverBand = hi >= 0 && bands ? { t: forecastX[hi], b: bands[hi] } : null;
-  const boldLine = lines?.find((l) => l.bold) ?? lines?.[0];
-  const hoverLine = hi >= 0 && boldLine ? { t: forecastX[hi], v: boldLine.values[hi] } : null;
+  // band readout (when there are no overlaid lines)
+  let hotBand: { t: number; b: Band } | null = null;
+  if (hover && monthX !== null && bands && (!lines || !lines.length) && forecastX.length) {
+    let hi = 0;
+    for (let i = 1; i < forecastX.length; i++) if (Math.abs(forecastX[i] - monthX) < Math.abs(forecastX[hi] - monthX)) hi = i;
+    hotBand = { t: forecastX[hi], b: bands[hi] };
+  }
 
   return (
     <svg
@@ -104,9 +111,9 @@ export function FanChart(props: FanChartProps) {
       role="img"
       onMouseMove={(e) => {
         const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-        setHoverX(x.invert(e.clientX - rect.left));
+        setHover({ mx: e.clientX - rect.left, my: e.clientY - rect.top });
       }}
-      onMouseLeave={() => setHoverX(null)}
+      onMouseLeave={() => setHover(null)}
     >
       {yTicks.map((t) => (
         <g key={`y${t}`}>
@@ -135,17 +142,20 @@ export function FanChart(props: FanChartProps) {
         </>
       )}
 
-      {lines?.map((l) => (
-        <path
-          key={l.id}
-          d={seriesLine(forecastX.map((t, i) => ({ t, v: l.values[i] }))) ?? ""}
-          fill="none"
-          stroke={l.color}
-          strokeWidth={l.width ?? (l.bold ? 2 : 1.1)}
-          strokeDasharray={l.dash}
-          opacity={l.bold ? 1 : 0.85}
-        />
-      ))}
+      {lines?.map((l) => {
+        const dim = hotLine && l !== hotLine;
+        return (
+          <path
+            key={l.id}
+            d={seriesLine([...l.points].sort((a, b) => a.t - b.t)) ?? ""}
+            fill="none"
+            stroke={l.color}
+            strokeWidth={l === hotLine ? (l.width ?? 1.2) + 1.4 : l.width ?? (l.bold ? 2 : 1.2)}
+            strokeDasharray={l.dash}
+            opacity={dim ? 0.28 : l.bold ? 1 : 0.9}
+          />
+        );
+      })}
 
       {history && history.length > 0 && (
         <path d={histLine(history) ?? ""} fill="none" stroke={theme.ink} strokeWidth={1.2} opacity={0.75} />
@@ -162,32 +172,39 @@ export function FanChart(props: FanChartProps) {
         </g>
       )}
 
-      {(hoverBand || hoverLine) && (
+      {/* hover: nearest line */}
+      {hotLine && hotPt && (
         <g>
-          <line x1={x(forecastX[hi])} x2={x(forecastX[hi])} y1={CHART_MARGIN.top} y2={height - CHART_MARGIN.bottom} stroke={color} strokeWidth={0.8} opacity={0.5} />
-          {hoverBand && <circle cx={x(hoverBand.t)} cy={y(hoverBand.b.q50)} r={3} fill={color} />}
-          {!hoverBand && hoverLine && <circle cx={x(hoverLine.t)} cy={y(hoverLine.v)} r={3} fill={boldLine!.color} />}
-          <g transform={`translate(${Math.min(x(forecastX[hi]) + 8, width - 132)}, ${CHART_MARGIN.top + 4})`}>
-            <rect width={124} height={hoverBand ? 46 : 32} rx={3} fill={theme.paper} stroke={theme.line} opacity={0.96} />
-            <text x={8} y={15} fontSize={10} fill={theme.inkSoft}>
-              month {forecastX[hi] === 0 ? "now" : forecastX[hi] > 0 ? `+${forecastX[hi]}` : forecastX[hi]}
+          <line x1={x(hotPt.t)} x2={x(hotPt.t)} y1={CHART_MARGIN.top} y2={height - CHART_MARGIN.bottom} stroke={hotLine.color} strokeWidth={0.7} opacity={0.45} />
+          <circle cx={x(hotPt.t)} cy={y(hotPt.v)} r={3} fill={hotLine.color} />
+          <g transform={`translate(${Math.min(x(hotPt.t) + 8, width - 150)}, ${Math.max(CHART_MARGIN.top, y(hotPt.v) - 30)})`}>
+            <rect width={146} height={30} rx={3} fill={theme.paper} stroke={theme.line} opacity={0.97} />
+            <text x={8} y={13} fontSize={10.5} fill={theme.ink}>
+              {hotLine.name}
             </text>
-            {hoverBand ? (
-              <>
-                <text x={8} y={29} fontSize={10.5} fill={theme.ink}>
-                  median {fmt(hoverBand.b.q50)} {props.unit}
-                </text>
-                <text x={8} y={41} fontSize={9.5} fill={theme.inkFaint}>
-                  80% in [{fmt(hoverBand.b.q05)}, {fmt(hoverBand.b.q95)}]
-                </text>
-              </>
-            ) : (
-              hoverLine && (
-                <text x={8} y={29} fontSize={10.5} fill={theme.ink}>
-                  {boldLine!.name} {fmt(hoverLine.v)} {props.unit}
-                </text>
-              )
-            )}
+            <text x={8} y={25} fontSize={9.5} fill={theme.inkSoft}>
+              {fmt(hotPt.v)} {props.unit} · month {hotPt.t === 0 ? "now" : hotPt.t > 0 ? `+${hotPt.t}` : hotPt.t}
+            </text>
+          </g>
+        </g>
+      )}
+
+      {/* hover: band readout */}
+      {hotBand && (
+        <g>
+          <line x1={x(hotBand.t)} x2={x(hotBand.t)} y1={CHART_MARGIN.top} y2={height - CHART_MARGIN.bottom} stroke={color} strokeWidth={0.8} opacity={0.5} />
+          <circle cx={x(hotBand.t)} cy={y(hotBand.b.q50)} r={3} fill={color} />
+          <g transform={`translate(${Math.min(x(hotBand.t) + 8, width - 132)}, ${CHART_MARGIN.top + 4})`}>
+            <rect width={124} height={46} rx={3} fill={theme.paper} stroke={theme.line} opacity={0.96} />
+            <text x={8} y={15} fontSize={10} fill={theme.inkSoft}>
+              month {hotBand.t === 0 ? "now" : hotBand.t > 0 ? `+${hotBand.t}` : hotBand.t}
+            </text>
+            <text x={8} y={29} fontSize={10.5} fill={theme.ink}>
+              median {fmt(hotBand.b.q50)} {props.unit}
+            </text>
+            <text x={8} y={41} fontSize={9.5} fill={theme.inkFaint}>
+              80% in [{fmt(hotBand.b.q05)}, {fmt(hotBand.b.q95)}]
+            </text>
           </g>
         </g>
       )}

@@ -47,7 +47,7 @@ Move the controls and the two signature behaviours appear and disappear:
 Other controls: **budget** (slider + entry, moves the cut line live),
 **manufacturing lead time** (shifts the requirement curve earlier), **stockout
 penalty** (the ratio of stockout penalty to enabled margin), **per-material
-cost / lead-time edits**, a **reseed** for a fresh world, and a **reset**.
+cost / lead-time edits**, and a **reset to defaults**.
 
 ## The model
 
@@ -115,8 +115,11 @@ only re-run when a structural input changes.
 6 finished goods · ~30 raw materials (a handful shared, two substitution pairs) ·
 monthly periods · 24 months history · 12 months horizon · manufacturing lead time
 1 · procurement lead times 1–6 · carrying cost 27%/yr · stockout penalty 0.5×
-margin · 3,000 Monte Carlo trajectories · everything seeded (reload reproduces
-the same world; reseed for a fresh one).
+margin · 3,000 Monte Carlo trajectories · a single fixed-seed world and observed
+past, so a reload always reproduces the same status quo. The probabilistic part
+is the *future* projection (the Monte Carlo fan), not the past — there is one
+world and one history, deliberately, to keep the focus on the purchasing
+decision rather than on alternative pasts.
 
 ## Engine layout
 
@@ -139,8 +142,10 @@ The UI (`src/components`, `src/hooks`) renders two time-aligned charts, the
 prioritised purchase table with the cut line, and the controls. The good
 selector drives both charts: the top shows that good's (or the aggregate)
 demand fan, and the bottom shows the raw materials it explodes into. The
-requirement chart has three views — a **breakdown** (one expected line per
-material, which sum to the total), the **total** with its uncertainty fan, and a
-**drill-down** to a single material's fan. Because expected requirement is just
-`BOM qty × latent demand`, the breakdown lines are exact and additive
-(`engine/requirement.ts`).
+requirement chart has three views — a **breakdown** (one line per material, each
+with its own exploded history and expected future, which sum to the total), the
+**total** with its uncertainty fan, and a **drill-down** to a single material's
+fan. Both charts carry observed history: the requirement history is the observed
+finished-good demand exploded through the BOMs. Hover snaps to the nearest line.
+Because expected requirement is just `BOM qty × latent demand`, the breakdown
+lines are exact and additive (`engine/requirement.ts`).
