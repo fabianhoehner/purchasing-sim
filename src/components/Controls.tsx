@@ -134,7 +134,7 @@ export function Controls({
         <p className="ctrl-hint">Drives both charts and the distribution below. Click a table row to inspect a part.</p>
       </div>
 
-      <div className="ctrl-group primary">
+      <div className="ctrl-group primary budget-panel">
         <label className="ctrl-label">Budget</label>
         <Slider
           value={config.budget}
@@ -178,7 +178,7 @@ export function Controls({
       </div>
 
       {prepared.substitutionPairs.length > 0 && (
-        <div className="ctrl-group">
+        <div className="ctrl-group substitution-panel">
           <label className="ctrl-label">Substitution links (one-way)</label>
           {prepared.substitutionPairs.map((p) => (
             <label className="ctrl-toggle small" key={`${p.donorId}->${p.baseId}`}>
