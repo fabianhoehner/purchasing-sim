@@ -172,6 +172,22 @@ export function App() {
               <h2>Investment vs. coverage</h2>
               <p>Two curves: fill rate (β, demand served) is nearly maxed cheaply; service level (α, never stocking out) is what costs the expensive tail to push toward ~99%. That's why "max budget" looked like 87% — that was α.</p>
             </div>
+            <div className="metric-note">
+              <strong>Service level vs. fill rate, in one example:</strong> you stock <strong>10</strong> units and demand
+              turns out to be <strong>15</strong>. You serve 10 and miss 5.
+              <ul>
+                <li>
+                  <span className="dot dot-alpha" /> <strong>Service level (α)</strong> — “was I fully covered?” No: that
+                  period counts as a <em>stockout</em>. It asks <em>how often</em> you never fall short.
+                </li>
+                <li>
+                  <span className="dot dot-beta" /> <strong>Fill rate (β)</strong> — “what share of units did I serve?”
+                  10 of 15 = <strong>67%</strong>. It gives credit for the units you did ship.
+                </li>
+              </ul>
+              The first units serve near-certain demand, so fill rate climbs fast and is nearly maxed at the economic
+              optimum. Pushing service level to ~99% means stocking for the rare big spikes — the expensive tail.
+            </div>
             <InvestmentCurve
               curve={prepared.investmentCurve}
               economicSpend={prepared.economicSpend}
