@@ -98,22 +98,32 @@ describe("survival / service-level queries", () => {
 });
 
 describe("scoreMaterial", () => {
-  it("produces rewards that fall to zero and stops", () => {
+  it("produces non-increasing rewards and extends to a high quantile", () => {
     // requirement concentrated around 5
     const sorted = Array.from({ length: 1000 }, (_, i) => (i < 500 ? 5 : i < 800 ? 6 : 8));
     sorted.sort((a, b) => a - b);
     const units = scoreMaterial("m", 4, 0.27, 2, sorted, 40);
     expect(units.length).toBeGreaterThan(0);
-    // n is strictly increasing; reward is non-increasing (flat at max while
-    // demand is certain, then falling once survival drops below 1).
     for (let i = 1; i < units.length; i++) {
       expect(units[i].n).toBe(units[i - 1].n + 1);
       expect(units[i].reward).toBeLessThanOrEqual(units[i - 1].reward + 1e-9);
     }
-    // it does strictly decrease somewhere (the tail), and the last funded unit
-    // is still positive — the loop stopped because the next one wasn't.
-    expect(units[units.length - 1].reward).toBeGreaterThan(0);
-    expect(units[units.length - 1].reward).toBeLessThan(units[0].reward);
+    // extends past the median into the tail (here up to the 99.5th pct = 8)
+    expect(units[units.length - 1].n).toBeGreaterThanOrEqual(8);
+  });
+
+  it("keeps the value-positive units economic and flags the negative tail", () => {
+    // high carrying cost + low penalty pushes the deep-tail units negative
+    const sorted = Array.from({ length: 1000 }, (_, i) => (i < 500 ? 5 : i < 800 ? 6 : 8));
+    sorted.sort((a, b) => a - b);
+    const units = scoreMaterial("m", 100, 0.27, 6, sorted, 5);
+    const positive = units.filter((u) => u.economic);
+    const negative = units.filter((u) => !u.economic);
+    expect(positive.length).toBeGreaterThan(0);
+    expect(negative.length).toBeGreaterThan(0);
+    // economic units come first (higher n is deeper / less likely consumed)
+    expect(Math.max(...positive.map((u) => u.n))).toBeLessThan(Math.min(...negative.map((u) => u.n)));
+    for (const u of units) expect(u.economic).toBe(u.reward > 0);
   });
 });
 
@@ -154,6 +164,29 @@ describe("allocation", () => {
     const more = allocateFor(prepared, Math.round(full * 0.8));
     expect(more.expectedCoverage).toBeGreaterThanOrEqual(alloc.expectedCoverage - 1e-9);
     expect(more.totalSpend).toBeGreaterThanOrEqual(alloc.totalSpend);
+  });
+
+  it("the economic optimum sits below full cost, and the curves are sensible", () => {
+    const prepared = prepare({ ...DEFAULT_CONFIG, nTrajectories: 600 });
+    expect(prepared.economicSpend).toBeGreaterThan(0);
+    expect(prepared.economicSpend).toBeLessThan(fullListCost(prepared));
+    // both metrics improve from the optimum to the full list
+    expect(prepared.fullServiceLevel).toBeGreaterThan(prepared.economicServiceLevel);
+    expect(prepared.fullFillRate).toBeGreaterThanOrEqual(prepared.economicFillRate);
+    // fill rate (β) leads service level (α) at any given spend
+    expect(prepared.economicFillRate).toBeGreaterThan(prepared.economicServiceLevel);
+    // both curves are monotone non-decreasing in spend
+    const c = prepared.investmentCurve;
+    for (let i = 1; i < c.length; i++) {
+      expect(c[i].spend).toBeGreaterThanOrEqual(c[i - 1].spend - 1e-9);
+      expect(c[i].fillRate).toBeGreaterThanOrEqual(c[i - 1].fillRate - 1e-9);
+      expect(c[i].serviceLevel).toBeGreaterThanOrEqual(c[i - 1].serviceLevel - 1e-9);
+    }
+    // funding exactly the economic optimum reproduces ~ its fill rate / service level
+    const alloc = allocateFor(prepared, prepared.economicSpend);
+    expect(Math.abs(alloc.expectedFillRate - prepared.economicFillRate)).toBeLessThan(0.03);
+    expect(Math.abs(alloc.expectedCoverage - prepared.economicServiceLevel)).toBeLessThan(0.03);
+    expect(prepared.fullFillRate).toBeGreaterThan(0.95);
   });
 
   it("a zero budget funds nothing and a huge budget funds the whole list", () => {

@@ -4,10 +4,10 @@
 // budget tick, so the slider stays smooth.
 
 import { allocate, buildPriorityList } from "./allocate";
-import { runMonteCarlo } from "./montecarlo";
+import { runMonteCarlo, serviceLevelAt } from "./montecarlo";
 import { scoreAll } from "./scoring";
 import { applyOverrides, buildWorld } from "./world";
-import type { Allocation, Config, Prepared, SubstitutionPair } from "./types";
+import type { Allocation, Config, InvestmentPoint, Prepared, SubstitutionPair } from "./types";
 
 export const DEFAULT_CONFIG: Config = {
   seed: 1742,
@@ -53,6 +53,8 @@ export function prepare(config: Config): Prepared {
     }
   }
 
+  const curve = buildInvestmentCurve(mc, priorityList);
+
   return {
     world,
     mc,
@@ -60,7 +62,89 @@ export function prepare(config: Config): Prepared {
     valueByMaterial: values,
     penaltyByMaterial: penalties,
     substitutionPairs,
+    investmentCurve: curve.points,
+    economicSpend: curve.economicSpend,
+    economicFillRate: curve.economicFillRate,
+    economicServiceLevel: curve.economicServiceLevel,
+    fullFillRate: curve.fullFillRate,
+    fullServiceLevel: curve.fullServiceLevel,
   };
+}
+
+/**
+ * Walk the ranked list cumulatively, tracking two curves as each unit is funded:
+ *  - fill rate (β): expected share of demand units served. The n-th unit of a
+ *    material is consumed with probability pConsumed = survival(n), so the
+ *    marginal fill it adds is exactly pConsumed — high for early near-certain
+ *    units, low for the tail → concave.
+ *  - service level (α): demand-weighted P(no stockout) = P(req <= qty). S-shaped.
+ * Also returns the economic optimum (where score/€ crosses zero) and the ceiling.
+ */
+function buildInvestmentCurve(
+  mc: Prepared["mc"],
+  priorityList: Prepared["priorityList"],
+): {
+  points: InvestmentPoint[];
+  economicSpend: number;
+  economicFillRate: number;
+  economicServiceLevel: number;
+  fullFillRate: number;
+  fullServiceLevel: number;
+} {
+  const meanReq = mc.windowMeanByMaterial;
+  const sorted = mc.windowSamplesByMaterial;
+  const mats = new Set(priorityList.map((u) => u.materialId));
+  let totalDemand = 0;
+  let alphaNum = 0; // sum of serviceLevel_m * meanReq_m
+  const qty = new Map<string, number>();
+  for (const id of mats) {
+    const w = meanReq[id] ?? 0;
+    totalDemand += w;
+    alphaNum += serviceLevelAt(sorted[id] ?? [], 0) * w;
+  }
+  const beta = (served: number) => (totalDemand > 0 ? served / totalDemand : 0);
+  const alpha = () => (totalDemand > 0 ? alphaNum / totalDemand : 0);
+
+  const fullCost = priorityList.reduce((a, u) => a + u.unitCost, 0);
+  const step = fullCost > 0 ? fullCost / 400 : 1;
+  const points: InvestmentPoint[] = [{ spend: 0, fillRate: 0, serviceLevel: alpha() }];
+
+  let spend = 0;
+  let served = 0;
+  let lastRecorded = 0;
+  let economicSpend = fullCost;
+  let economicFillRate = 0;
+  let economicServiceLevel = alpha();
+  let crossed = false;
+
+  for (const u of priorityList) {
+    if (!crossed && u.scorePerEuro <= 0) {
+      economicSpend = spend;
+      economicFillRate = beta(served);
+      economicServiceLevel = alpha();
+      crossed = true;
+    }
+    const id = u.materialId;
+    const q0 = qty.get(id) ?? 0;
+    const arr = sorted[id] ?? [];
+    served += u.pConsumed;
+    alphaNum += (serviceLevelAt(arr, q0 + 1) - serviceLevelAt(arr, q0)) * (meanReq[id] ?? 0);
+    qty.set(id, q0 + 1);
+    spend += u.unitCost;
+    if (spend - lastRecorded >= step) {
+      points.push({ spend, fillRate: beta(served), serviceLevel: alpha() });
+      lastRecorded = spend;
+    }
+  }
+  const fullFillRate = beta(served);
+  const fullServiceLevel = alpha();
+  points.push({ spend, fillRate: fullFillRate, serviceLevel: fullServiceLevel });
+  if (!crossed) {
+    economicSpend = spend;
+    economicFillRate = fullFillRate;
+    economicServiceLevel = fullServiceLevel;
+  }
+  return { points, economicSpend, economicFillRate, economicServiceLevel, fullFillRate, fullServiceLevel };
 }
 
 export function allocateFor(prepared: Prepared, budget: number): Allocation {

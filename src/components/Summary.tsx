@@ -4,11 +4,11 @@ function euro(v: number): string {
   return `€${Math.round(v).toLocaleString("en-US")}`;
 }
 
-export function Summary({ allocation, fundedMaterials }: { allocation: Allocation; fundedMaterials: number }) {
+export function Summary({ allocation }: { allocation: Allocation }) {
   const stats = [
     { label: "Total spend", value: euro(allocation.totalSpend), sub: `of ${euro(allocation.budget)} budget` },
-    { label: "Units funded", value: allocation.unitsFunded.toLocaleString("en-US"), sub: `${fundedMaterials} materials` },
-    { label: "Expected coverage", value: `${(allocation.expectedCoverage * 100).toFixed(0)}%`, sub: "demand-weighted service level" },
+    { label: "Fill rate", value: `${(allocation.expectedFillRate * 100).toFixed(0)}%`, sub: "β · share of demand served" },
+    { label: "Service level", value: `${(allocation.expectedCoverage * 100).toFixed(0)}%`, sub: "α · P(no stockout), weighted" },
     { label: "Stockout exposure avoided", value: euro(allocation.stockoutExposureAvoided), sub: "expected penalty removed" },
   ];
   return (

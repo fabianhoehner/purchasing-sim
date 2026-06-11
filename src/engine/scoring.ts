@@ -73,7 +73,14 @@ export function computePenalties(
   return penalties;
 }
 
-/** Walk the units of one material, returning each with reward > 0. */
+/**
+ * Walk the units of one material. We do NOT stop at the economic optimum
+ * (reward <= 0); we keep going to a high quantile of the requirement
+ * distribution, so a large budget can chase a high fill rate. Units past the
+ * optimum carry a negative reward (and negative score/€), so the global ranking
+ * naturally places them last — you only buy them when you over-invest. Each unit
+ * is flagged `economic` (reward > 0) so the optimum can be marked.
+ */
 export function scoreMaterial(
   materialId: string,
   unitCost: number,
@@ -82,14 +89,17 @@ export function scoreMaterial(
   sortedWindow: number[],
   penaltyPerUnit: number,
 ): ScoredUnit[] {
+  const N = sortedWindow.length;
+  if (N === 0) return [];
   const windowYears = Math.max(leadTimeMean, 1) / 12;
   const leftoverCost = unitCost * carryingRateAnnual * windowYears;
-  const maxN = sortedWindow.length ? sortedWindow[sortedWindow.length - 1] : 0;
+  // extend to the 99.5th percentile so the tail (the last few % of fill) exists
+  const q995 = sortedWindow[Math.min(N - 1, Math.floor(0.995 * (N - 1)))];
+  const nMax = Math.max(1, Math.ceil(q995));
   const units: ScoredUnit[] = [];
-  for (let n = 1; n <= maxN; n++) {
+  for (let n = 1; n <= nMax; n++) {
     const p = survivalAtLeast(sortedWindow, n);
     const reward = p * penaltyPerUnit - (1 - p) * leftoverCost;
-    if (reward <= 0) break; // survival only falls from here, so reward only falls
     units.push({
       materialId,
       n,
@@ -97,6 +107,7 @@ export function scoreMaterial(
       reward,
       scorePerEuro: reward / Math.max(unitCost, 1e-6),
       unitCost,
+      economic: reward > 0,
     });
   }
   return units;

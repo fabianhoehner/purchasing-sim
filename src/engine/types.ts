@@ -142,6 +142,7 @@ export interface ScoredUnit {
   reward: number; // euros of expected reward this unit adds
   scorePerEuro: number; // reward / unitCost
   unitCost: number;
+  economic: boolean; // reward > 0 (above the economic optimum)
 }
 
 export interface MaterialLine {
@@ -163,7 +164,8 @@ export interface Allocation {
   cutIndex: number; // index into the global priority list where the budget ran out
   totalSpend: number;
   budget: number;
-  expectedCoverage: number; // demand-weighted mean service level
+  expectedCoverage: number; // service level (α): demand-weighted P(no stockout)
+  expectedFillRate: number; // fill rate (β): share of demand units served
   stockoutExposureAvoided: number; // expected penalty euros avoided by funded units
   unitsFunded: number;
 }
@@ -176,6 +178,13 @@ export interface SubstitutionPair {
   enabled: boolean;
 }
 
+/** A point on the spend → coverage curves (diminishing returns). */
+export interface InvestmentPoint {
+  spend: number;
+  fillRate: number; // β: share of demand units served (concave)
+  serviceLevel: number; // α: P(no stockout), demand-weighted (S-shaped)
+}
+
 export interface Prepared {
   world: World;
   mc: McResult;
@@ -183,4 +192,13 @@ export interface Prepared {
   valueByMaterial: Record<string, number>; // enabled-margin value per unit
   penaltyByMaterial: Record<string, number>; // stockout penalty per unit
   substitutionPairs: SubstitutionPair[]; // stable across enable/disable toggles
+  /** Spend → fill-rate / service-level curves, from €0 to the full list. */
+  investmentCurve: InvestmentPoint[];
+  /** The economic optimum: spend on all value-positive (reward > 0) units. */
+  economicSpend: number;
+  economicFillRate: number;
+  economicServiceLevel: number;
+  /** Values if the whole (extended) list is funded — the practical ceiling. */
+  fullFillRate: number;
+  fullServiceLevel: number;
 }

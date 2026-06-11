@@ -21,14 +21,16 @@ export function useSimulation() {
   const prepared = useMemo(() => prepare(config), [structuralKey]);
   const fullCost = useMemo(() => fullListCost(prepared), [prepared]);
 
-  const defaultBudget = (cost: number) => Math.round((cost * 0.55) / 100) * 100;
+  // Start at the economic optimum: fund every value-positive unit and no more.
+  // The user can then slide up (chase a higher fill rate, uneconomically) or down.
+  const defaultBudget = () => Math.round(prepared.economicSpend / 100) * 100;
 
-  // Pick a sensible starting budget (~55% of full) once the first world exists.
   useEffect(() => {
     if (!budgetInitialised.current && fullCost > 0) {
       budgetInitialised.current = true;
-      setConfig((c) => ({ ...c, budget: defaultBudget(fullCost) }));
+      setConfig((c) => ({ ...c, budget: defaultBudget() }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullCost]);
 
   const allocation = useMemo(() => allocateFor(prepared, config.budget), [prepared, config.budget]);
@@ -63,10 +65,11 @@ export function useSimulation() {
         // Reset to the same default seed leaves fullCost unchanged, so the init
         // effect won't re-fire — set the budget directly here.
         budgetInitialised.current = true;
-        setConfig({ ...DEFAULT_CONFIG, budget: defaultBudget(fullCost) });
+        setConfig({ ...DEFAULT_CONFIG, budget: defaultBudget() });
       },
     }),
-    [fullCost],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fullCost, prepared.economicSpend],
   );
 
   return { config, prepared, allocation, fullCost, actions };

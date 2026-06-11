@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ChartsPanel } from "./components/ChartsPanel";
 import { Controls } from "./components/Controls";
 import { Histogram } from "./components/Histogram";
+import { InvestmentCurve } from "./components/InvestmentCurve";
 import { PurchaseTable } from "./components/PurchaseTable";
 import { Summary } from "./components/Summary";
 import { useSimulation } from "./hooks/useSimulation";
@@ -14,8 +15,6 @@ export function App() {
   const [matView, setMatView] = useState<string>(BREAKDOWN);
   // The distribution panel has its own part selection, independent of the chart.
   const [histPart, setHistPart] = useState<string>("");
-
-  const fundedMaterials = useMemo(() => allocation.lines.filter((l) => l.funded).length, [allocation]);
 
   // Default the distribution to the top funded line, until the user picks a part
   // (via the histogram selector or by clicking a table row).
@@ -57,7 +56,7 @@ export function App() {
             <ChartsPanel world={prepared.world} mc={prepared.mc} goodSel={goodSel} matView={matView} />
           </section>
 
-          <Summary allocation={allocation} fundedMaterials={fundedMaterials} />
+          <Summary allocation={allocation} />
 
           <section className="card">
             <div className="section-head">
@@ -81,6 +80,20 @@ export function App() {
                 onSelect={setHistPart}
               />
             )}
+          </section>
+
+          <section className="card">
+            <div className="section-head">
+              <h2>Investment vs. coverage</h2>
+              <p>Two curves: fill rate (β, demand served) is nearly maxed cheaply; service level (α, never stocking out) is what costs the expensive tail to push toward ~99%. That's why "max budget" looked like 87% — that was α.</p>
+            </div>
+            <InvestmentCurve
+              curve={prepared.investmentCurve}
+              economicSpend={prepared.economicSpend}
+              currentSpend={allocation.totalSpend}
+              currentFillRate={allocation.expectedFillRate}
+              currentServiceLevel={allocation.expectedCoverage}
+            />
           </section>
         </main>
       </div>

@@ -105,10 +105,28 @@ isolated behind a clean signature so it can be swapped without touching the UI.
 
 ### Ranking and budget
 Every `(material, unit n)` pair from every material competes in one global list,
-sorted by score per euro. The budget is spent strictly top-down, giving a single
-clean cut line; a material's purchase quantity is how many of its units cleared
-the cut. The budget walk is cheap and re-runs live; the Monte Carlo and scoring
+sorted by score per euro. The list extends past the **economic optimum** (the
+last value-positive unit) into the tail, with those units ranked last — so a
+large budget can chase a higher fill rate, uneconomically. The budget is spent
+strictly top-down, giving a single clean cut line; a material's purchase quantity
+is how many of its units cleared the cut. The default budget is the economic
+optimum. The budget walk is cheap and re-runs live; the Monte Carlo and scoring
 only re-run when a structural input changes.
+
+### Two coverage metrics (α and β)
+The **investment-vs-coverage** curve plots both, because they answer different
+questions and have different shapes:
+
+- **Service level (α)** — P(no stockout) = the percentile a quantity reaches on
+  the requirement distribution. S-shaped in spend; this is the per-part figure on
+  the histogram and the table's coverage column.
+- **Fill rate (β)** — expected share of demand units served = `Σ pConsumed / Σ
+  demand`. Concave in spend (each unit's marginal fill is its consumption
+  probability), and nearly maxed by the economic optimum.
+
+At the optimum β is ~99% while α is ~87%: you serve almost all demand, but fully
+avoid stockouts only 87% of the time. Pushing α toward 99% means buying the
+expensive tail — the diminishing-returns region the curve makes visible.
 
 ## Defaults
 

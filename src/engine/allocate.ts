@@ -33,6 +33,7 @@ export function allocate(
   let cutIndex = priorityList.length;
   let unitsFunded = 0;
   let stockoutExposureAvoided = 0;
+  let servedUnits = 0; // expected demand units served = sum of funded pConsumed
   let funding = true; // flips false at the cut; we keep scanning for the table
 
   for (let i = 0; i < priorityList.length; i++) {
@@ -47,6 +48,7 @@ export function allocate(
       fundedReward.set(u.materialId, (fundedReward.get(u.materialId) ?? 0) + u.reward);
       marginal.set(u.materialId, u.scorePerEuro);
       stockoutExposureAvoided += u.pConsumed * (penalties[u.materialId] ?? 0);
+      servedUnits += u.pConsumed;
     } else if (funding) {
       // first unit we cannot afford: this is the single, clean cut line. We
       // stop funding here (no skipping ahead to cheaper units) but keep walking
@@ -94,7 +96,9 @@ export function allocate(
     }
   }
 
-  // Demand-weighted expected coverage across all considered materials.
+  // Two aggregate metrics across the considered materials:
+  //  - service level (α): demand-weighted P(no stockout) — S-shaped in spend.
+  //  - fill rate (β): share of demand units actually served — concave in spend.
   let wsum = 0;
   let wcov = 0;
   for (const line of lines) {
@@ -102,6 +106,7 @@ export function allocate(
     wcov += line.coverage * line.meanRequirement;
   }
   const expectedCoverage = wsum > 0 ? wcov / wsum : 0;
+  const expectedFillRate = wsum > 0 ? servedUnits / wsum : 0;
 
   return {
     lines,
@@ -109,6 +114,7 @@ export function allocate(
     totalSpend: spend,
     budget,
     expectedCoverage,
+    expectedFillRate,
     stockoutExposureAvoided,
     unitsFunded,
   };
