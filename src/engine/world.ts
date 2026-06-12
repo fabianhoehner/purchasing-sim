@@ -260,6 +260,10 @@ export function applyOverrides(
       unitCost: o?.unitCost ?? m.unitCost,
       leadTimeMean: o?.leadTimeMean ?? m.leadTimeMean,
       substitutesFor,
+      // A donor whose only link is disabled is no longer a donor: recompute
+      // `premium` from the (filtered) links, or it keeps the 1.25x penalty factor
+      // in substitution.ts despite no longer rescuing anything.
+      premium: substitutesFor.length > 0,
     };
   });
   const backed = new Set<string>();

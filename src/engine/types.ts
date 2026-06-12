@@ -129,9 +129,13 @@ export interface McResult {
   requirementAggregate: Band[];
   /** Expected per-material requirement lines (decomposition), see above. */
   breakdown: BreakdownLines;
-  /** Sorted (ascending) window-requirement samples per material, for scoring. */
+  /** Sorted (ascending) window-requirement samples per material, for scoring and
+   *  the histogram. These ARE option-adjusted: a premium material's samples
+   *  include the discounted base-overflow it can rescue. */
   windowSamplesByMaterial: Record<string, number[]>;
-  /** Mean window requirement per material (for weighting / display). */
+  /** Mean window requirement per material — the TRUE expected requirement,
+   *  computed pre-option-value. Used as the demand weight in α/β and shown as
+   *  "mean requirement"; it is NOT option-adjusted. */
   windowMeanByMaterial: Record<string, number>;
 }
 

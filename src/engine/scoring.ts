@@ -17,9 +17,47 @@
 // signature is the seam where an action-reward scorer could drop in.
 
 import { meanHorizonLevel } from "./demand";
-import { survivalAtLeast } from "./montecarlo";
+import { survivalAtLeast } from "./stats";
 import { penaltyFactor } from "./substitution";
 import type { McResult, ScoredUnit, World } from "./types";
+
+/**
+ * Cost of carrying one unit through its coverage window if it is not consumed.
+ * Shared by scoreMaterial and by the option-value reference quantile so the two
+ * cannot drift apart.
+ */
+export function leftoverCost(unitCost: number, carryingRateAnnual: number, leadTimeMean: number): number {
+  return unitCost * carryingRateAnnual * (Math.max(leadTimeMean, 1) / 12);
+}
+
+/**
+ * The service level the economic optimum funds a material to, in closed form.
+ * scoreMaterial funds units while P(req>=n)*penalty > (1-P)*leftover, stopping at
+ * survival p* = leftover/(penalty+leftover); the coverage reached is 1 - p* =
+ * penalty/(penalty+leftover). Budget-independent — a pure function of the part's
+ * own economics.
+ */
+export function economicServiceLevel(penaltyPerUnit: number, leftover: number): number {
+  const denom = penaltyPerUnit + leftover;
+  return denom > 0 ? penaltyPerUnit / denom : 0;
+}
+
+/**
+ * Per-base reference quantile for the substitution option value: how deep each
+ * base is bought on its own economics. Overflow *beyond* this point is what a
+ * premium realistically rescues. Clamped to [0.5, 0.995].
+ */
+export function baseReferenceQuantiles(world: World, stockoutPenaltyRatio: number): Record<string, number> {
+  const values = computeMaterialValues(world);
+  const penalties = computePenalties(world, values, stockoutPenaltyRatio);
+  const out: Record<string, number> = {};
+  for (const m of world.materials) {
+    const lc = leftoverCost(m.unitCost, m.carryingRateAnnual, m.leadTimeMean);
+    const sl = economicServiceLevel(penalties[m.id] ?? 0, lc);
+    out[m.id] = Math.max(0.5, Math.min(0.995, sl));
+  }
+  return out;
+}
 
 /**
  * Per-unit "stockout cover" value of each material: the demand-weighted blend of
@@ -91,15 +129,14 @@ export function scoreMaterial(
 ): ScoredUnit[] {
   const N = sortedWindow.length;
   if (N === 0) return [];
-  const windowYears = Math.max(leadTimeMean, 1) / 12;
-  const leftoverCost = unitCost * carryingRateAnnual * windowYears;
+  const leftover = leftoverCost(unitCost, carryingRateAnnual, leadTimeMean);
   // extend to the 99.5th percentile so the tail (the last few % of fill) exists
   const q995 = sortedWindow[Math.min(N - 1, Math.floor(0.995 * (N - 1)))];
   const nMax = Math.max(1, Math.ceil(q995));
   const units: ScoredUnit[] = [];
   for (let n = 1; n <= nMax; n++) {
     const p = survivalAtLeast(sortedWindow, n);
-    const reward = p * penaltyPerUnit - (1 - p) * leftoverCost;
+    const reward = p * penaltyPerUnit - (1 - p) * leftover;
     units.push({
       materialId,
       n,

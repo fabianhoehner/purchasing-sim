@@ -8,7 +8,7 @@
 // expensive Monte Carlo and scoring upstream do not re-run when only the budget
 // moves.
 
-import { serviceLevelAt } from "./montecarlo";
+import { serviceLevelAt } from "./stats";
 import type { Allocation, MaterialLine, McResult, ScoredUnit, World } from "./types";
 
 /** Sort units into the global priority list: best return on cash first. */

@@ -5,11 +5,12 @@
 //
 //  1. Option value. A premium material carries, on top of its own demand, a
 //     discounted claim on the overflow of every base it can rescue — the demand
-//     the base can't cover itself. That extends the premium's requirement tail,
-//     so its later units keep a non-trivial survival probability. We never plan
-//     to cover the base *with* the premium (the overflow is only what spills past
-//     a reference coverage of the base, and it is discounted), so the base still
-//     covers the bulk of its own demand.
+//     the base can't cover itself. The overflow is anchored at the base's own
+//     *economic coverage* (the service level the base is bought to on its own
+//     economics — passed in as a reference quantile per base, not a fixed
+//     constant), so we only credit the premium with rescuing demand the base
+//     genuinely won't have covered. It is discounted on top of that. The base
+//     still covers the bulk of its own demand.
 //
 //  2. Penalty asymmetry. A material that has a backup is a little less critical;
 //     a premium with no upstream backup (and which others lean on) is a little
@@ -17,9 +18,8 @@
 
 import type { Material, World } from "./types";
 
-/** Reference coverage quantile of a base's own demand; overflow past it is what
- *  a premium realistically rescues. */
-const BASE_REFERENCE_QUANTILE = 0.7;
+/** Fallback reference quantile if a base is missing from the supplied map. */
+const DEFAULT_REFERENCE_QUANTILE = 0.7;
 
 function quantileOfUnsorted(values: number[], q: number): number {
   if (values.length === 0) return 0;
@@ -33,13 +33,16 @@ function quantileOfUnsorted(values: number[], q: number): number {
 
 /**
  * Add discounted base-overflow option value to each premium material's window
- * samples. Operates per trajectory index so correlation between a base and its
- * premium partner is preserved. Returns a new map; inputs are not mutated.
+ * samples. The overflow each premium claims is anchored at the base's economic
+ * coverage, supplied per base in `referenceQuantileByMaterial` (clamped here to
+ * [0.5, 0.995]). Operates per trajectory index so correlation between a base and
+ * its premium partner is preserved. Returns a new map; inputs are not mutated.
  */
 export function applyOptionValue(
   world: World,
   baseWindowSamples: Record<string, number[]>,
   optionDiscount: number,
+  referenceQuantileByMaterial: Record<string, number>,
 ): Record<string, number[]> {
   const out: Record<string, number[]> = {};
   for (const id of Object.keys(baseWindowSamples)) out[id] = baseWindowSamples[id].slice();
@@ -51,7 +54,9 @@ export function applyOptionValue(
     for (const baseId of m.substitutesFor) {
       const baseSamples = baseWindowSamples[baseId];
       if (!baseSamples) continue;
-      const ref = quantileOfUnsorted(baseSamples, BASE_REFERENCE_QUANTILE);
+      const rawQ = referenceQuantileByMaterial[baseId] ?? DEFAULT_REFERENCE_QUANTILE;
+      const q = Math.max(0.5, Math.min(0.995, rawQ));
+      const ref = quantileOfUnsorted(baseSamples, q);
       const n = Math.min(premiumSamples.length, baseSamples.length);
       for (let i = 0; i < n; i++) {
         const overflow = Math.max(0, baseSamples[i] - ref);

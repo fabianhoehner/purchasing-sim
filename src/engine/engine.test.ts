@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { buildBomIndex, explodeTrajectory } from "./bom";
 import { meanRequirementLines } from "./requirement";
 import { latentLevel } from "./demand";
-import { serviceLevelAt, survivalAtLeast } from "./montecarlo";
-import { scoreMaterial } from "./scoring";
+import { serviceLevelAt, survivalAtLeast } from "./stats";
+import { baseReferenceQuantiles, scoreMaterial } from "./scoring";
 import { applyOptionValue, penaltyFactor } from "./substitution";
+import { runMonteCarlo } from "./montecarlo";
 import { allocateFor, DEFAULT_CONFIG, fullListCost, prepare } from "./simulate";
-import { buildWorld } from "./world";
+import { applyOverrides, buildWorld } from "./world";
 import type { Material, World } from "./types";
 
 function tinyWorld(): World {
@@ -139,14 +140,60 @@ describe("substitution", () => {
   it("option value extends the premium's window samples but not the base's", () => {
     const world = tinyWorld();
     const base = { a: [0, 5, 10, 20, 30], abis: [1, 1, 1, 1, 1] };
-    const out = applyOptionValue(world, base, 0.5);
+    // reference at the base's median (10) → overflow beyond 10 is rescued
+    const out = applyOptionValue(world, base, 0.5, { a: 0.5 });
     expect(out["a"]).toEqual(base["a"]); // base unchanged
-    // premium got discounted overflow of A beyond A's 70th percentile added in
     const grew = out["abis"].some((v, i) => v > base["abis"][i]);
     expect(grew).toBe(true);
     const sumBefore = base["abis"].reduce((x, y) => x + y, 0);
     const sumAfter = out["abis"].reduce((x, y) => x + y, 0);
     expect(sumAfter).toBeGreaterThan(sumBefore);
+  });
+
+  it("a deeper reference quantile leaves less overflow for the premium", () => {
+    const world = tinyWorld();
+    const base = { a: [0, 5, 10, 20, 30], abis: [0, 0, 0, 0, 0] };
+    const shallow = applyOptionValue(world, base, 1, { a: 0.5 }); // ref ~10
+    const deep = applyOptionValue(world, base, 1, { a: 0.95 }); // ref ~28
+    const sum = (xs: number[]) => xs.reduce((x, y) => x + y, 0);
+    expect(sum(deep["abis"])).toBeLessThan(sum(shallow["abis"]));
+  });
+
+  it("the reference quantile rises with the stockout-penalty dial", () => {
+    const world = buildWorld({ seed: 1742, historyMonths: 24, horizonMonths: 12, carryingRateAnnual: 0.27 });
+    const low = baseReferenceQuantiles(world, 0.05);
+    const high = baseReferenceQuantiles(world, 1.0);
+    // a base that is rescued (m_bearing): covered deeper when missing it hurts more
+    expect(high["m_bearing"]).toBeGreaterThan(low["m_bearing"]);
+    expect(high["m_bearing"]).toBeLessThanOrEqual(0.995);
+    expect(low["m_bearing"]).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("disabling both links drops the donors' premium flag and 1.25x penalty", () => {
+    const base = buildWorld({ seed: 1742, historyMonths: 24, horizonMonths: 12, carryingRateAnnual: 0.27 });
+    const world = applyOverrides(base, {}, ["m_bearing_hd->m_bearing", "m_seal_v->m_seal"]);
+    for (const id of ["m_bearing_hd", "m_seal_v"]) {
+      const m = world.materials.find((x) => x.id === id)!;
+      expect(m.substitutesFor).toEqual([]);
+      expect(m.premium).toBe(false);
+      expect(penaltyFactor(m)).toBe(1);
+    }
+  });
+});
+
+describe("monte carlo option value", () => {
+  it("option discount changes the premium's samples but not its true mean", () => {
+    const world = buildWorld({ seed: 1742, historyMonths: 24, horizonMonths: 12, carryingRateAnnual: 0.27 });
+    const cfg = { ...DEFAULT_CONFIG, nTrajectories: 1500 };
+    const withOpt = runMonteCarlo(world, { ...cfg, optionDiscount: 0.5 });
+    const noOpt = runMonteCarlo(world, { ...cfg, optionDiscount: 0 });
+    // the mean is the TRUE pre-option requirement — identical for any discount
+    expect(withOpt.windowMeanByMaterial["m_bearing_hd"]).toBeCloseTo(noOpt.windowMeanByMaterial["m_bearing_hd"], 9);
+    // but the scored / histogram samples carry the option overflow, so they differ
+    const sum = (xs: number[]) => xs.reduce((x, y) => x + y, 0);
+    expect(sum(withOpt.windowSamplesByMaterial["m_bearing_hd"])).toBeGreaterThan(
+      sum(noOpt.windowSamplesByMaterial["m_bearing_hd"]),
+    );
   });
 });
 

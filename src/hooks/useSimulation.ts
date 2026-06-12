@@ -22,8 +22,9 @@ export function useSimulation() {
   const fullCost = useMemo(() => fullListCost(prepared), [prepared]);
 
   // Start at the economic optimum: fund every value-positive unit and no more.
-  // The user can then slide up (chase a higher fill rate, uneconomically) or down.
-  const defaultBudget = () => Math.round(prepared.economicSpend / 100) * 100;
+  // Ceil to €100 (not round) so we never land just below the optimum and leave
+  // the last value-positive unit unfunded. The user can then slide up or down.
+  const defaultBudget = () => Math.ceil(prepared.economicSpend / 100) * 100;
 
   useEffect(() => {
     if (!budgetInitialised.current && fullCost > 0) {

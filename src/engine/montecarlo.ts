@@ -12,6 +12,7 @@ import { buildBomIndex } from "./bom";
 import { sampleHistory, sampleTrajectory } from "./demand";
 import { meanRequirementLines } from "./requirement";
 import { Rng } from "./rng";
+import { baseReferenceQuantiles } from "./scoring";
 import { applyOptionValue } from "./substitution";
 import type { Band, Config, McResult, SeriesPoint, World } from "./types";
 
@@ -44,7 +45,7 @@ export function runMonteCarlo(world: World, config: Config): McResult {
 
   // --- observed history: a single realisation, its own deterministic stream --
   const histRng = new Rng((config.seed ^ 0x1a2b3c4d) >>> 0);
-  const histRaw = sampleHistory(world.goods, config.historyMonths, histRng);
+  const histRaw = sampleHistory(world.goods, world.historyMonths, histRng);
   const historyMonths: number[] = [];
   for (let i = world.historyMonths - 1; i >= 0; i--) historyMonths.push(-i);
   const historyByGood: Record<string, SeriesPoint[]> = {};
@@ -105,15 +106,26 @@ export function runMonteCarlo(world: World, config: Config): McResult {
     }
   }
 
-  // --- substitution option value, then sort window samples for survival ------
-  const windowSamplesByMaterial = applyOptionValue(world, baseWindow, config.optionDiscount);
+  // --- demand means from the TRUE (pre-option) requirement -------------------
+  // windowMeanByMaterial is the real expected requirement; it is the demand
+  // weight in the α/β denominators and the "mean requirement" shown in the table,
+  // so it must NOT include the premium's discounted option overflow.
   const windowMeanByMaterial: Record<string, number> = {};
-  for (const id of Object.keys(windowSamplesByMaterial)) {
-    const arr = windowSamplesByMaterial[id];
+  for (const id of Object.keys(baseWindow)) {
+    const arr = baseWindow[id];
     let s = 0;
     for (const v of arr) s += v;
     windowMeanByMaterial[id] = s / arr.length;
-    arr.sort((a, b) => a - b); // ascending, for survival queries in scoring
+  }
+
+  // --- substitution option value, anchored at each base's economic coverage ---
+  // (scoring and the histogram read these option-adjusted samples — that is the
+  // point of the feature). The reference quantile is the base's own economic
+  // service level, so we only credit rescuing demand the base won't have covered.
+  const refQuantiles = baseReferenceQuantiles(world, config.stockoutPenaltyRatio);
+  const windowSamplesByMaterial = applyOptionValue(world, baseWindow, config.optionDiscount, refQuantiles);
+  for (const id of Object.keys(windowSamplesByMaterial)) {
+    windowSamplesByMaterial[id].sort((a, b) => a - b); // ascending, for survival queries
   }
 
   // --- collapse per-period samples to quantile fans --------------------------
@@ -148,32 +160,4 @@ export function runMonteCarlo(world: World, config: Config): McResult {
     windowSamplesByMaterial,
     windowMeanByMaterial,
   };
-}
-
-/** Survival P(requirement >= n) from an ascending-sorted sample array. */
-export function survivalAtLeast(sortedAsc: number[], n: number): number {
-  if (sortedAsc.length === 0) return 0;
-  // first index with value >= n
-  let lo = 0;
-  let hi = sortedAsc.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (sortedAsc[mid] >= n) hi = mid;
-    else lo = mid + 1;
-  }
-  return (sortedAsc.length - lo) / sortedAsc.length;
-}
-
-/** Service level P(requirement <= q) from an ascending-sorted sample array. */
-export function serviceLevelAt(sortedAsc: number[], q: number): number {
-  if (sortedAsc.length === 0) return 1;
-  // count of values <= q
-  let lo = 0;
-  let hi = sortedAsc.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (sortedAsc[mid] <= q) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo / sortedAsc.length;
 }

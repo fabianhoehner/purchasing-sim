@@ -4,7 +4,8 @@
 // budget tick, so the slider stays smooth.
 
 import { allocate, buildPriorityList } from "./allocate";
-import { runMonteCarlo, serviceLevelAt } from "./montecarlo";
+import { runMonteCarlo } from "./montecarlo";
+import { serviceLevelAt } from "./stats";
 import { scoreAll } from "./scoring";
 import { applyOverrides, buildWorld } from "./world";
 import type { Allocation, Config, InvestmentPoint, Prepared, SubstitutionPair } from "./types";
@@ -151,7 +152,8 @@ export function allocateFor(prepared: Prepared, budget: number): Allocation {
   return allocate(prepared.world, prepared.mc, prepared.priorityList, prepared.penaltyByMaterial, budget);
 }
 
-/** Total cash needed to fund every positive-reward unit — the natural slider max. */
+/** Total cash to fund the entire extended list — economic units plus the
+ *  negative-reward tail. This is the budget slider's ceiling, not the optimum. */
 export function fullListCost(prepared: Prepared): number {
   let c = 0;
   for (const u of prepared.priorityList) c += u.unitCost;

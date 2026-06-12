@@ -2,8 +2,10 @@
 // the purchase list: the empirical distribution of the material's requirement
 // over its coverage window (the same distribution the scorer reads), with the
 // chosen buy quantity drawn as a vertical line. The share of the distribution to
-// the left of that line is exactly the fill rate the quantity buys — so you can
-// see why "buy 2,038" means "98% fill rate". Move the budget and the line slides.
+// the left of that line is the service level the quantity buys — P(requirement <=
+// quantity) — so "buy 2,038" reads off as "98% service level". (That is the
+// percentile, not the fill rate β = E[min(req, q)]/E[req].) Move the budget and
+// the line slides.
 
 import { scaleLinear } from "d3-scale";
 import { useMeasure } from "../hooks/useMeasure";

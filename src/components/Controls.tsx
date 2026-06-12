@@ -166,7 +166,11 @@ export function Controls({
           onCommit={actions.setStockoutPenaltyRatio}
           format={(v) => `${v.toFixed(2)}× margin`}
         />
-        <p className="ctrl-hint">How dearly a missed sale is valued, relative to the enabled margin.</p>
+        <p className="ctrl-hint">
+          Value of avoiding a stockout, as a multiple of the enabled margin. The sale is assumed recoverable
+          (backorder), so this penalty — not the margin itself — is what a unit unlocks; a low dial legitimately shrinks
+          the optimum.
+        </p>
       </div>
 
       <div className="ctrl-group">

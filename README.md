@@ -31,7 +31,7 @@ Move the controls and the two signature behaviours appear and disappear:
   a material raises that material's need, so its requirement survival function
   stays high deep into the tail and the priority list keeps buying it well beyond
   average demand. Flip the **correlated-shock** toggle on and the effect
-  strengthens (in the default world the shared fastener jumps ~10k → ~13k units
+  strengthens (in the default world the shared fastener jumps ~4.9k → ~6.2k units
   at the same budget). There is no "shared ⇒ overstock" rule — it falls out of
   the requirement distribution.
 
@@ -96,6 +96,12 @@ score/€   = reward(n) / unitCost
   and a substitution penalty factor (a part with a backup is a little less
   critical; a backup-less premium is a little more).
 - `leftover_cost` is carrying the unit through the window if it is not needed.
+
+Note the framing: a consumed unit unlocks the **stockout penalty avoided**
+(dial × margin), *not* margin + penalty. The lost sale is assumed recoverable —
+a backorder — so the margin itself is never at stake in the reward; the dial is
+the whole teaching device. That is why a very low dial legitimately shrinks the
+optimum: if missing a unit barely costs anything, you rationally hold very little.
 
 This is deliberately the simpler **stock-reward** formulation, chosen for
 clarity. Lokad's **action-reward** is the more advanced version (it works in
@@ -170,6 +176,7 @@ single material's fan. Hover snaps to the nearest line.
 The **requirement histogram** is the picture that explains a line in the purchase
 list: the empirical distribution of a part's requirement over its coverage
 window, with the chosen buy quantity drawn as a vertical line. The share of the
-distribution to its left is exactly the fill rate that quantity buys — so "buy
-2,038" reads off as "98% fill rate". Click any table row (or the left selector)
-to inspect a part; move the budget and the line slides live.
+distribution to its left is the **service level** that quantity buys —
+`P(requirement ≤ quantity)`, the percentile — so "buy 2,038" reads off as "98%
+service level" (this is α, not the fill rate β). Click any table row (or the left
+selector) to inspect a part; move the budget and the line slides live.
