@@ -172,6 +172,12 @@ export interface Allocation {
   expectedFillRate: number; // fill rate (β): share of demand units served
   stockoutExposureAvoided: number; // expected penalty euros avoided by funded units
   unitsFunded: number;
+  /** Share of finished-good demand (margin×demand weighted) that can be COMPLETED
+   *  given the funded stock — a good needs all its parts, so this is the weakest
+   *  link across each good's BOM, not per-part availability. */
+  fgFulfilment: number;
+  /** Finished-good margin per month the funded stock can complete (€/mo). */
+  enabledOutputValue: number;
 }
 
 export interface SubstitutionPair {
@@ -187,6 +193,39 @@ export interface InvestmentPoint {
   spend: number;
   fillRate: number; // β: share of demand units served (concave)
   serviceLevel: number; // α: P(no stockout), demand-weighted (S-shaped)
+}
+
+/**
+ * The value-derivation graph: a raw material's worth flows from the finished
+ * goods it completes. good importance = margin × mean demand; a material's
+ * importance = the sum of the importance of every good that uses it (a good
+ * depends on each of its parts to be built, so each part carries the good's full
+ * weight).
+ */
+export interface ValueGood {
+  id: string;
+  name: string;
+  importance: number; // margin × mean demand (€/mo)
+}
+export interface ValueMaterial {
+  id: string;
+  name: string;
+  importance: number; // Σ importance of goods that use it
+  goodCount: number; // how many finished goods use it
+  shared: boolean;
+  premium: boolean;
+}
+export interface ValueEdge {
+  goodId: string;
+  materialId: string;
+  flow: number; // the good's importance carried into this material
+}
+export interface ValueGraph {
+  goods: ValueGood[]; // sorted by importance desc
+  materials: ValueMaterial[]; // sorted by importance desc
+  edges: ValueEdge[];
+  maxGoodImportance: number;
+  maxMaterialImportance: number;
 }
 
 export interface Prepared {
@@ -205,4 +244,6 @@ export interface Prepared {
   /** Values if the whole (extended) list is funded — the practical ceiling. */
   fullFillRate: number;
   fullServiceLevel: number;
+  /** Where value comes from: finished goods → the raw materials they complete. */
+  valueGraph: ValueGraph;
 }

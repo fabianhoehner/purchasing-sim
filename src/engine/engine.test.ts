@@ -6,6 +6,7 @@ import { serviceLevelAt, survivalAtLeast } from "./stats";
 import { baseReferenceQuantiles, scoreMaterial } from "./scoring";
 import { applyOptionValue, penaltyFactor } from "./substitution";
 import { runMonteCarlo } from "./montecarlo";
+import { buildValueGraph } from "./value";
 import { allocateFor, DEFAULT_CONFIG, fullListCost, prepare } from "./simulate";
 import { applyOverrides, buildWorld } from "./world";
 import type { Material, World } from "./types";
@@ -194,6 +195,38 @@ describe("monte carlo option value", () => {
     expect(sum(withOpt.windowSamplesByMaterial["m_bearing_hd"])).toBeGreaterThan(
       sum(noOpt.windowSamplesByMaterial["m_bearing_hd"]),
     );
+  });
+});
+
+describe("value graph", () => {
+  it("a material's value is the summed importance of the goods that use it", () => {
+    const world = tinyWorld(); // g1: margin 100, level 10; g2: margin 200, level 5 → both importance 1000
+    const g = buildValueGraph(world);
+    expect(g.materials.find((m) => m.id === "a")!.importance).toBeCloseTo(1000, 6);
+    expect(g.materials.find((m) => m.id === "abis")!.importance).toBeCloseTo(1000, 6);
+    expect(g.materials.find((m) => m.id === "a")!.goodCount).toBe(1);
+    expect(g.edges.length).toBe(2);
+  });
+
+  it("on the default world, a shared part spans multiple goods and materials are ranked", () => {
+    const world = buildWorld({ seed: 1742, historyMonths: 24, horizonMonths: 12, carryingRateAnnual: 0.27 });
+    const g = buildValueGraph(world);
+    expect(g.materials.find((m) => m.id === "m_fastener")!.goodCount).toBeGreaterThan(1);
+    for (let i = 1; i < g.materials.length; i++) {
+      expect(g.materials[i].importance).toBeLessThanOrEqual(g.materials[i - 1].importance + 1e-9);
+    }
+  });
+});
+
+describe("finished-good output", () => {
+  it("fulfilment is in [0,1], rises with budget, and unlocks positive output value", () => {
+    const prepared = prepare({ ...DEFAULT_CONFIG, nTrajectories: 600 });
+    const lo = allocateFor(prepared, Math.round(prepared.economicSpend * 0.2));
+    const hi = allocateFor(prepared, Math.round(prepared.economicSpend));
+    expect(lo.fgFulfilment).toBeGreaterThanOrEqual(0);
+    expect(hi.fgFulfilment).toBeGreaterThan(lo.fgFulfilment);
+    expect(hi.fgFulfilment).toBeLessThanOrEqual(1);
+    expect(hi.enabledOutputValue).toBeGreaterThan(0);
   });
 });
 

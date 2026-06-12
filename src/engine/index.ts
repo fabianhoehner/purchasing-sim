@@ -16,4 +16,5 @@ export {
   baseReferenceQuantiles,
 } from "./scoring";
 export { allocate, buildPriorityList } from "./allocate";
+export { buildValueGraph } from "./value";
 export { DEFAULT_CONFIG, prepare, allocateFor, fullListCost } from "./simulate";

@@ -84,7 +84,8 @@ export function Histogram({
       <div className="hist-head">
         {PartSelect}
         <span className="hist-readout">
-          buy <strong>{qty.toLocaleString("en-US")}</strong> → <strong style={{ color: theme.red }}>{(fill * 100).toFixed(0)}%</strong> service level
+          buy <strong>{qty.toLocaleString("en-US")}</strong> → covers{" "}
+          <strong style={{ color: theme.red }}>{(fill * 100).toFixed(0)}%</strong> of demand scenarios
         </span>
       </div>
       {width > 0 && (
@@ -141,10 +142,9 @@ export function Histogram({
         </svg>
       )}
       <p className="hist-foot">
-        This is the <strong>service level</strong>: the red line covers {(fill * 100).toFixed(0)}% of demand scenarios
-        (blue), leaving {(100 - fill * 100).toFixed(0)}% where demand runs higher (pink = stockout risk). Mean{" "}
-        {fmt(mean)}, median {fmt(median)}, 90th pct {fmt(p90)} units. Lead time {material.leadTimeMean.toFixed(1)} mo sets
-        the window.
+        The red line covers {(fill * 100).toFixed(0)}% of demand scenarios (blue), leaving{" "}
+        {(100 - fill * 100).toFixed(0)}% where demand runs higher (pink = shortfall risk). Mean {fmt(mean)}, median{" "}
+        {fmt(median)}, 90th pct {fmt(p90)} units. Lead time {material.leadTimeMean.toFixed(1)} mo sets the window.
       </p>
     </div>
   );

@@ -8,6 +8,7 @@
 // expensive Monte Carlo and scoring upstream do not re-run when only the budget
 // moves.
 
+import { meanHorizonLevel } from "./demand";
 import { serviceLevelAt } from "./stats";
 import type { Allocation, MaterialLine, McResult, ScoredUnit, World } from "./types";
 
@@ -108,6 +109,31 @@ export function allocate(
   const expectedCoverage = wsum > 0 ? wcov / wsum : 0;
   const expectedFillRate = wsum > 0 ? servedUnits / wsum : 0;
 
+  // Finished-good output: a good can be completed only as well as its weakest
+  // component (it needs all its parts). So fulfilment is the min part-coverage
+  // across each good's BOM, weighted by the good's economic importance — this is
+  // the "capacity to finish finished goods", not per-part availability.
+  const coverageByMaterial = new Map(lines.map((l) => [l.materialId, l.coverage]));
+  const componentsByGood = new Map<string, string[]>();
+  for (const e of world.bom) {
+    if (!componentsByGood.has(e.goodId)) componentsByGood.set(e.goodId, []);
+    componentsByGood.get(e.goodId)!.push(e.materialId);
+  }
+  let weightSum = 0;
+  let weightedCompletion = 0;
+  let enabledOutputValue = 0;
+  for (const g of world.goods) {
+    const comps = componentsByGood.get(g.id) ?? [];
+    if (comps.length === 0) continue;
+    let completion = 1;
+    for (const mId of comps) completion = Math.min(completion, coverageByMaterial.get(mId) ?? 0);
+    const weight = g.margin * meanHorizonLevel(g, world.horizonMonths);
+    weightSum += weight;
+    weightedCompletion += completion * weight;
+    enabledOutputValue += completion * weight;
+  }
+  const fgFulfilment = weightSum > 0 ? weightedCompletion / weightSum : 0;
+
   return {
     lines,
     cutIndex,
@@ -117,5 +143,7 @@ export function allocate(
     expectedFillRate,
     stockoutExposureAvoided,
     unitsFunded,
+    fgFulfilment,
+    enabledOutputValue,
   };
 }

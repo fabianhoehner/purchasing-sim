@@ -7,10 +7,13 @@ requirements, and ranks every candidate purchase into a single economic priority
 list, Lokad-style. Given a budget, it fills that list top-down and shows what to
 buy — and a per-part requirement histogram shows why each quantity was chosen.
 
-> **The teaching point.** You do not plan to the mean, you plan to the economics
-> of the tail. Parts that are shared across many products, or that are hard to
-> substitute, earn priority because of the flexibility they buy — and that
-> priority *emerges* from the economics, it is not wired in by hand.
+> **The teaching point.** A raw material has no value of its own — its value is
+> *derived* from the finished goods it lets you complete: the importance of those
+> goods (margin × demand) and how many of them depend on it. So you don't optimise
+> each part's availability in isolation; you buy the **capacity to finish finished
+> goods**. Parts shared across many products, or that gate very profitable ones,
+> earn priority — and that priority *emerges* from the economics, it is not wired
+> in by hand.
 
 ## Running it
 
@@ -36,13 +39,12 @@ Move the controls and the two signature behaviours appear and disappear:
   the requirement distribution.
 
 - **Premium substitutes carry option value.** A premium material (e.g. the
-  heavy-duty bearing) is scored on its own demand *plus* a discounted claim on
-  the overflow of the base material it can rescue. That raises its marginal
-  reward, but its higher cost slows how far down the list its units appear, so
-  the tool holds enough of it for its own demand plus a thin flexibility buffer
-  rather than planning to cover the base with it. Switch the substitution link
-  off and the premium loses that buffer (its quantity drops) while the base —
-  now without a backup — becomes more critical and is bought a little deeper.
+  heavy-duty bearing) is scored on its own demand *plus* a discounted claim on the
+  overflow of the base it can rescue — but only the overflow *beyond the base's own
+  economic coverage*, so it's a thin flexibility buffer, not a plan to cover the
+  base with the premium. Switch the substitution link off and the premium loses
+  both that buffer and its backup-less penalty premium (its quantity drops), while
+  the base — now without a backup — becomes a little more critical.
 
 Other controls: **budget** (slider + entry, moves the cut line live), **stockout
 penalty** (the ratio of stockout penalty to enabled margin), **per-material cost
@@ -119,20 +121,33 @@ is how many of its units cleared the cut. The default budget is the economic
 optimum. The budget walk is cheap and re-runs live; the Monte Carlo and scoring
 only re-run when a structural input changes.
 
-### Two coverage metrics (α and β)
-The **investment-vs-coverage** curve plots both, because they answer different
-questions and have different shapes:
+### Where value comes from (the headline)
+A raw material's worth is the finished goods it completes. Each good's importance
+is `margin × mean demand`; because a good needs **all** its parts to be built,
+each part carries the good's full importance, and a material's value is the sum
+across every good that uses it:
 
-- **Service level (α)** — P(no stockout) = the percentile a quantity reaches on
-  the requirement distribution. S-shaped in spend; this is the per-part figure on
-  the histogram and the table's coverage column.
-- **Fill rate (β)** — expected share of demand units served = `Σ pConsumed / Σ
-  demand`. Concave in spend (each unit's marginal fill is its consumption
-  probability), and nearly maxed by the economic optimum.
+```
+value(material m) = Σ over goods g that use m of (margin_g × mean_demand_g)
+```
 
-At the optimum β is ~99% while α is ~87%: you serve almost all demand, but fully
-avoid stockouts only 87% of the time. Pushing α toward 99% means buying the
-expensive tail — the diminishing-returns region the curve makes visible.
+This is exactly the per-unit value the scorer already uses (its "stockout cover"
+is this total divided by the units required), so the ranking is unchanged — the
+**value-flow graph** just makes the relationship legible: value pours from goods
+into the parts that complete them, and the most-shared / highest-margin-gating
+parts rise to the top of the buy list.
+
+The summary reports **finished-good output**, not per-part availability:
+- **Fulfilment** — the share of finished-good demand (importance-weighted) you can
+  actually *complete*. A good is only as buildable as its **weakest** component, so
+  this is the min part-coverage across each good's BOM — buying one part to 99%
+  does nothing if a sibling is at 50%.
+- **Output value enabled** — `Σ over goods of completion × margin × demand` (€/mo):
+  the finished-good margin the funded stock unlocks.
+
+(An earlier build reported part-level service level α and fill rate β; that framing
+measured *part* availability rather than *finished-good* completion, so it was
+removed in favour of the two metrics above.)
 
 ## Defaults
 
@@ -159,8 +174,10 @@ UI:
 | `engine/requirement.ts` | Expected per-material requirement lines (the breakdown) |
 | `engine/montecarlo.ts` | Trajectories → per-material requirement distribution + chart fans |
 | `engine/substitution.ts` | One-way `substitutes_for` routing + premium option value |
-| `engine/scoring.ts` | Stock-reward score per unit (swappable seam) |
-| `engine/allocate.ts` | Pool units, rank by score/€, walk the budget cut line |
+| `engine/scoring.ts` | Stock-reward score per unit (swappable seam) + value helpers |
+| `engine/value.ts` | Finished-good → raw-material value-derivation graph |
+| `engine/stats.ts` | Sorted-sample survival / service-level queries |
+| `engine/allocate.ts` | Pool units, rank by score/€, walk the budget cut line, finished-good output |
 | `engine/simulate.ts` | Orchestration; splits the expensive prepare from the cheap allocate |
 
 The UI (`src/components`, `src/hooks`) renders two time-aligned charts (sharing
@@ -173,10 +190,14 @@ history and one sampled future, so past and future look alike and the lines sum
 to the total), the **total** with its uncertainty fan, and a **drill-down** to a
 single material's fan. Hover snaps to the nearest line.
 
-The **requirement histogram** is the picture that explains a line in the purchase
-list: the empirical distribution of a part's requirement over its coverage
-window, with the chosen buy quantity drawn as a vertical line. The share of the
-distribution to its left is the **service level** that quantity buys —
-`P(requirement ≤ quantity)`, the percentile — so "buy 2,038" reads off as "98%
-service level" (this is α, not the fill rate β). Click any table row (or the left
-selector) to inspect a part; move the budget and the line slides live.
+The **requirement histogram** explains a line in the purchase list: the empirical
+distribution of a part's requirement over its coverage window, with the chosen
+buy quantity drawn as a vertical line. The mass to its left is the share of demand
+scenarios that quantity covers (`P(requirement ≤ quantity)`). Click any table row
+(or the left selector) to inspect a part; move the budget and the line slides
+live.
+
+The **value-flow graph** shows where each part's worth comes from — finished
+goods (sized by importance) on one side, raw materials (sized by derived value)
+on the other, BOM links between — making the buy order legible: the parts under
+the most, or most profitable, goods are funded first.

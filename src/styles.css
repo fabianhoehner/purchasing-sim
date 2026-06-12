@@ -532,6 +532,69 @@ select {
   display: block;
 }
 
+/* ---- value graphs ---------------------------------------------------- */
+.value-subhead {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin: 16px 0 8px;
+}
+.vbars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.vbar-row:hover {
+  background: #f3f0ea;
+}
+.vbar-row.focused {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+.vbar-label {
+  flex: none;
+  width: 188px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vbar-row.focused .vbar-label {
+  font-weight: 600;
+}
+.vbar-count {
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+.vbar-track {
+  flex: 1;
+  display: flex;
+  height: 13px;
+  background: var(--panel);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.vbar-seg {
+  height: 100%;
+  min-width: 1px;
+}
+.vbars-foot {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin: 8px 2px 0;
+}
+
 /* ---- error fallback -------------------------------------------------- */
 .error-fallback {
   max-width: 560px;

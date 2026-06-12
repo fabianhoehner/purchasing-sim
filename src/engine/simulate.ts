@@ -7,6 +7,7 @@ import { allocate, buildPriorityList } from "./allocate";
 import { runMonteCarlo } from "./montecarlo";
 import { serviceLevelAt } from "./stats";
 import { scoreAll } from "./scoring";
+import { buildValueGraph } from "./value";
 import { applyOverrides, buildWorld } from "./world";
 import type { Allocation, Config, InvestmentPoint, Prepared, SubstitutionPair } from "./types";
 
@@ -69,6 +70,7 @@ export function prepare(config: Config): Prepared {
     economicServiceLevel: curve.economicServiceLevel,
     fullFillRate: curve.fullFillRate,
     fullServiceLevel: curve.fullServiceLevel,
+    valueGraph: buildValueGraph(world),
   };
 }
 

@@ -4,17 +4,28 @@ function euro(v: number): string {
   return `€${Math.round(v).toLocaleString("en-US")}`;
 }
 
-const FILL_TIP =
-  "Fill rate (β): the share of all demand units you actually serve. Example — stock 10, demand comes in at 15: you serve 10, so β counts 10/15 = 67%.";
-const SL_TIP =
-  "Service level (α): how often you fully cover demand with no shortage at all. Example — stock 10, demand 15: that period is a stockout (a miss), even though you served 10 units.";
+const FULFIL_TIP =
+  "Share of finished-good demand (weighted by margin × demand) you can actually complete. A good needs ALL its parts, so this is the weakest part across each good's BOM — buying one part to 99% does nothing if another is at 50%.";
+const OUTPUT_TIP =
+  "Finished-good margin per month the funded stock lets you complete (Σ over goods of completion × margin × demand). This is the value the purchase actually unlocks.";
 
 export function Summary({ allocation }: { allocation: Allocation }) {
+  const funded = allocation.lines.filter((l) => l.funded).length;
   const stats = [
     { label: "Total spend", value: euro(allocation.totalSpend), sub: `of ${euro(allocation.budget)} budget` },
-    { label: "Fill rate", value: `${(allocation.expectedFillRate * 100).toFixed(0)}%`, sub: "demand units served (β)", tip: FILL_TIP },
-    { label: "Service level", value: `${(allocation.expectedCoverage * 100).toFixed(0)}%`, sub: "no-stockout chance (α)", tip: SL_TIP },
-    { label: "Stockout exposure avoided", value: euro(allocation.stockoutExposureAvoided), sub: "expected penalty removed" },
+    { label: "Materials funded", value: `${funded}`, sub: `of ${allocation.lines.length} with demand` },
+    {
+      label: "Finished-good fulfilment",
+      value: `${(allocation.fgFulfilment * 100).toFixed(0)}%`,
+      sub: "of FG demand completable (weakest link)",
+      tip: FULFIL_TIP,
+    },
+    {
+      label: "Output value enabled",
+      value: `${euro(allocation.enabledOutputValue)}/mo`,
+      sub: "finished-good margin you can complete",
+      tip: OUTPUT_TIP,
+    },
   ];
   return (
     <div className="summary">

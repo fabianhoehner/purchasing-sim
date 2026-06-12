@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChartsPanel } from "./components/ChartsPanel";
 import { Controls } from "./components/Controls";
 import { Histogram } from "./components/Histogram";
-import { InvestmentCurve } from "./components/InvestmentCurve";
 import { PurchaseTable } from "./components/PurchaseTable";
 import { Summary } from "./components/Summary";
 import { Tour, type TourStep } from "./components/Tour";
+import { GoodLegend, useGoodColors, ValueBars, ValueFlow } from "./components/ValueGraphs";
 import { useSimulation } from "./hooks/useSimulation";
 
 const BREAKDOWN = "__breakdown";
@@ -29,12 +29,12 @@ const TOUR_STEPS: TourStep[] = [
   {
     selector: "#distribution-section",
     title: "Why this quantity",
-    body: "A part's requirement is a distribution. The quantity you buy sits at a point on it — the share of scenarios it covers is its service level. The blue mass is served, the pink is stockout risk. Move the budget and the red line slides.",
+    body: "A part's requirement is a distribution, not a number. The quantity you buy sits at a point on it — the blue mass to its left is the share of demand scenarios it covers, the pink is the shortfall risk. Move the budget and the line slides.",
   },
   {
-    selector: "#investment-section",
-    title: "Plan to the tail, not the mean",
-    body: "Fill rate (demand served) is nearly maxed cheaply — the first euros buy near-certain demand. Service level (never stocking out) lags, and the last points to ~99% need the expensive tail. Past the economic optimum, more stock destroys value.",
+    selector: "#value-section",
+    title: "Value comes from the finished goods",
+    body: "A raw material is worth nothing on its own — its value is the finished goods it lets you complete. Each good's importance (margin × demand) flows into every part it needs, so a part used by many goods, or by a few very profitable ones, rises to the top. That relationship IS the buy order.",
   },
   {
     selector: ".substitution-panel",
@@ -86,15 +86,17 @@ export function App() {
     setTourStep((s) => (s === null || s === 0 ? s : s - 1));
   }, []);
 
-  // Per-step budget nudge: scarce to open the ranking story, then the optimum so
-  // the histogram and the investment curve sit on the meaningful point.
+  // Per-step budget nudge: scarce to open the ranking story (steps 1–2), then the
+  // optimum at the distribution step so the quantity shown is the meaningful one.
   useEffect(() => {
     if (tourStep === null) return;
     const opt = prepared.economicSpend;
     if (tourStep === 1) actions.setBudget(Math.round(opt * 0.35));
-    else if (tourStep === 3 || tourStep === 4) actions.setBudget(Math.round(opt));
+    else if (tourStep === 3) actions.setBudget(Math.round(opt));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourStep]);
+
+  const goodColor = useGoodColors(prepared.valueGraph);
 
   // Default the distribution to the top funded line, until the user picks a part
   // (via the histogram selector or by clicking a table row).
@@ -117,10 +119,10 @@ export function App() {
           </button>
         </div>
         <p className="lede">
-          Probabilistic demand for finished goods, exploded through bills of material into raw-material requirements,
-          then ranked into a single economic priority list. Given a budget, the list is filled top-down. The lesson:
-          plan to the economics of the tail, not the mean — and let shared and hard-to-substitute parts earn their
-          priority.
+          Probabilistic demand for finished goods, exploded through bills of material into raw-material requirements. A
+          raw material is worth what it lets you finish — so the tool ranks every candidate purchase by the finished-good
+          value it unlocks per euro, and fills that list to your budget. The lesson: don't optimise parts in isolation,
+          buy the capacity to finish finished goods.
         </p>
       </header>
 
@@ -154,7 +156,7 @@ export function App() {
           <section className="card" id="distribution-section">
             <div className="section-head">
               <h2>Requirement distribution — why this quantity</h2>
-              <p>The buy quantity sits on the part's requirement distribution at exactly its fill rate. Move the budget and the red line slides.</p>
+              <p>The buy quantity sits on the part's requirement distribution; the mass to its left is the share of demand scenarios it covers. Move the budget and the red line slides.</p>
             </div>
             {focusMaterial && (
               <Histogram
@@ -167,34 +169,20 @@ export function App() {
             )}
           </section>
 
-          <section className="card" id="investment-section">
+          <section className="card" id="value-section">
             <div className="section-head">
-              <h2>Investment vs. coverage</h2>
-              <p>Two curves: fill rate (β, demand served) is nearly maxed cheaply; service level (α, never stocking out) is what costs the expensive tail to push toward ~99%. That's why "max budget" looked like 87% — that was α.</p>
+              <h2>Where value comes from: finished goods → raw materials</h2>
+              <p>
+                A part is worth what it lets you finish. Each good's importance (margin × demand) flows into every part it
+                needs, so parts under many — or very profitable — goods are bought first. That relationship is the whole
+                ranking. <em>(Two views — tell me which reads better and I'll keep one.)</em>
+              </p>
             </div>
-            <div className="metric-note">
-              <strong>Service level vs. fill rate, in one example:</strong> you stock <strong>10</strong> units and demand
-              turns out to be <strong>15</strong>. You serve 10 and miss 5.
-              <ul>
-                <li>
-                  <span className="dot dot-alpha" /> <strong>Service level (α)</strong> — “was I fully covered?” No: that
-                  period counts as a <em>stockout</em>. It asks <em>how often</em> you never fall short.
-                </li>
-                <li>
-                  <span className="dot dot-beta" /> <strong>Fill rate (β)</strong> — “what share of units did I serve?”
-                  10 of 15 = <strong>67%</strong>. It gives credit for the units you did ship.
-                </li>
-              </ul>
-              The first units serve near-certain demand, so fill rate climbs fast and is nearly maxed at the economic
-              optimum. Pushing service level to ~99% means stocking for the rare big spikes — the expensive tail.
-            </div>
-            <InvestmentCurve
-              curve={prepared.investmentCurve}
-              economicSpend={prepared.economicSpend}
-              currentSpend={allocation.totalSpend}
-              currentFillRate={allocation.expectedFillRate}
-              currentServiceLevel={allocation.expectedCoverage}
-            />
+            <GoodLegend graph={prepared.valueGraph} goodColor={goodColor} />
+            <h3 className="value-subhead">Option A — value-flow map (goods → parts)</h3>
+            <ValueFlow graph={prepared.valueGraph} goodColor={goodColor} focusId={focusId ?? ""} onSelect={setHistPart} />
+            <h3 className="value-subhead">Option B — value bars (per part, stacked by good)</h3>
+            <ValueBars graph={prepared.valueGraph} goodColor={goodColor} focusId={focusId ?? ""} onSelect={setHistPart} />
           </section>
         </main>
       </div>
