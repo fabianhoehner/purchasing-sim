@@ -5,7 +5,7 @@ import { Histogram } from "./components/Histogram";
 import { PurchaseTable } from "./components/PurchaseTable";
 import { Summary } from "./components/Summary";
 import { Tour, type TourStep } from "./components/Tour";
-import { GoodLegend, useGoodColors, ValueBars, ValueFlow } from "./components/ValueGraphs";
+import { GoodLegend, useGoodColors, ValueFlow } from "./components/ValueGraphs";
 import { useSimulation } from "./hooks/useSimulation";
 
 const BREAKDOWN = "__breakdown";
@@ -175,14 +175,11 @@ export function App() {
               <p>
                 A part is worth what it lets you finish. Each good's importance (margin × demand) flows into every part it
                 needs, so parts under many — or very profitable — goods are bought first. That relationship is the whole
-                ranking. <em>(Two views — tell me which reads better and I'll keep one.)</em>
+                ranking.
               </p>
             </div>
             <GoodLegend graph={prepared.valueGraph} goodColor={goodColor} />
-            <h3 className="value-subhead">Option A — value-flow map (goods → parts)</h3>
             <ValueFlow graph={prepared.valueGraph} goodColor={goodColor} focusId={focusId ?? ""} onSelect={setHistPart} />
-            <h3 className="value-subhead">Option B — value bars (per part, stacked by good)</h3>
-            <ValueBars graph={prepared.valueGraph} goodColor={goodColor} focusId={focusId ?? ""} onSelect={setHistPart} />
           </section>
         </main>
       </div>
